@@ -2,30 +2,73 @@
 
 ## System Diagram
 
-Two views, following C4 levels 1 and 2. The `.mmd` files are the source of truth. The `.svg` files
-are generated from them by `scripts/render-diagrams.sh` and committed, because GitHub renders
-mermaid only in the file view, never in a pull request diff, and most other markdown viewers do not
-render it at all. A CI job fails if a committed image no longer matches its source.
+Two views, following C4 levels 1 and 2.
 
 Level 3 is deliberately absent. [Application Components](#application-components) already specifies
 every component with its interface and responsibilities, in more detail than a component diagram
 would carry.
 
+These render in the GitHub file view. They do not render in a pull request diff, which shows raw
+markdown, so review the rendered file rather than the diff when a diagram changes.
+
 ### Context
 
-![System context diagram](diagrams/context.svg)
+```mermaid
+flowchart LR
+    pub["Order Publisher<br/>external system"]
+    ops["Operations Engineer<br/>person"]
 
-Source: [`diagrams/context.mmd`](diagrams/context.mmd).
+    subgraph boundary["AWS account (trust boundary)"]
+        sys["Reliable Orders Worker<br/>validates, deduplicates and stores order events"]
+        cw["Amazon CloudWatch<br/>logs, metrics, alarms, dashboard"]
+    end
 
-The trust boundary is the AWS account. The publisher is outside it and is not trusted, which is why
-every field is validated and every payload size is bounded. The operations engineer is the only
+    pub -->|"OrderCreatedV1, at-least-once over SQS"| sys
+    sys -->|"structured logs and EMF metrics"| cw
+    cw -->|"alarms on DLQ depth and conflicts"| ops
+    ops -->|"inspects and redrives failed messages"| sys
+
+    classDef external fill:#eee,stroke:#777,color:#111
+    classDef person fill:#dfe7f3,stroke:#4a6fa5,color:#111
+    class pub external
+    class ops person
+```
+
+The trust boundary is the AWS account. The publisher sits outside it and is not trusted, which is
+why every field is validated and every payload size is bounded. The operations engineer is the only
 human in the loop, and reaches the system through alarms rather than by watching it.
 
 ### Containers
 
-![Container diagram](diagrams/container.svg)
+```mermaid
+flowchart LR
+    pub["Order Publisher CLI<br/>.NET"]
 
-Source: [`diagrams/container.mmd`](diagrams/container.mmd).
+    subgraph boundary["AWS account (trust boundary)"]
+        q["Orders Queue<br/>SQS standard"]
+        dlq["Orders DLQ<br/>SQS standard"]
+        fn["Order Processor<br/>Lambda, .NET 10"]
+        idem[("IdempotencyRecords<br/>DynamoDB")]
+        ord[("Orders<br/>DynamoDB")]
+        cw["CloudWatch<br/>logs, EMF metrics, alarms"]
+        otel["OpenTelemetry via ADOT<br/>traces to X-Ray"]
+    end
+
+    gha["GitHub Actions<br/>CI and deployment"]
+
+    pub -->|"OrderCreatedV1"| q
+    q -->|"batch of up to 10"| fn
+    fn -->|"failed message IDs only"| q
+    q -->|"after maxReceiveCount"| dlq
+    fn -->|"TransactWriteItems, all or nothing"| idem
+    fn -->|"TransactWriteItems, all or nothing"| ord
+    fn --> cw
+    fn --> otel
+    gha -->|"OIDC AssumeRole, CDK deploy"| boundary
+
+    classDef external fill:#eee,stroke:#777,color:#111
+    class pub,gha external
+```
 
 The two DynamoDB tables are written by one transaction, which is the whole design. The edge from
 the Lambda back to the queue carries failed message IDs only, and the edge from the queue to the
