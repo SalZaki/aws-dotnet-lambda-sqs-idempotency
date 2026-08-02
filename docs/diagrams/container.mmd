@@ -1,0 +1,29 @@
+%% C4 level 2, containers.
+%% Source of truth. container.svg is generated from this file, never edited by hand.
+flowchart LR
+    pub["Order Publisher CLI<br/>.NET"]
+
+    subgraph boundary["AWS account (trust boundary)"]
+        q["Orders Queue<br/>SQS standard"]
+        dlq["Orders DLQ<br/>SQS standard"]
+        fn["Order Processor<br/>Lambda, .NET 10"]
+        idem[("IdempotencyRecords<br/>DynamoDB")]
+        ord[("Orders<br/>DynamoDB")]
+        cw["CloudWatch<br/>logs, EMF metrics, alarms"]
+        otel["OpenTelemetry via ADOT<br/>traces to X-Ray"]
+    end
+
+    gha["GitHub Actions<br/>CI and deployment"]
+
+    pub -->|"OrderCreatedV1"| q
+    q -->|"batch of up to 10"| fn
+    fn -->|"failed message IDs only"| q
+    q -->|"after maxReceiveCount"| dlq
+    fn -->|"TransactWriteItems, all or nothing"| idem
+    fn -->|"TransactWriteItems, all or nothing"| ord
+    fn --> cw
+    fn --> otel
+    gha -->|"OIDC AssumeRole, CDK deploy"| boundary
+
+    classDef external fill:#eee,stroke:#777,color:#111
+    class pub,gha external

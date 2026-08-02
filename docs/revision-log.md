@@ -1,0 +1,107 @@
+# Revision Log
+
+Changes from specification v1. Each entry states what changed and why.
+
+Entries 1 to 45 cite the section numbers used by the single-file specification. Those numbers no
+longer exist. Change 46 split the document, so anything before it should be read against the
+document names in [the index](README.md) rather than looked up by number.
+
+## Blocking corrections
+
+| # | Change | Sections | Rationale |
+| --- | --- | --- | --- |
+| 1 | Split the single `PayloadSha256` into `EnvelopeSha256` and `BusinessSha256` | 5.4, 5.5, 6.2, 6.3, 9.5, 9.6, 10.4 | v1 hashed "the event" but required a republished order under a new `eventId` to classify as a duplicate. One hash cannot do both: with envelope fields in scope, every legitimate republish became a conflict routed to the DLQ with a high-severity alarm. |
+| 2 | Fixed `IdempotencyKey` as the verbatim `eventId`; removed `EntityType` and `EntityId` | 5.6, 9.6 | v1 never specified the key's value, and the two extra attributes implied a second idempotency row that the two-item transaction never writes. |
+| 3 | Replaced the visibility-timeout worked example with an explicit formula computed in CDK | 9.1, 18.4, 21 | v1's table summed to 181 or 211, never the stated 210, and CDK Tests required a test against a formula that was never written down. |
+| 4 | Documented the 36-character `ClientRequestToken` limit and mapped `IdempotentParameterMismatchException` | 5.6, 10.6, 11 | A bare UUID fits exactly; any prefix overflows. The exception was unmapped in v1 and fell through to "transient by default", burning all five retries on a permanent condition. |
+| 5 | Introduced `IncomingMessage` and removed `SQSEvent.SQSMessage` from core interfaces | 10.1, 10.7, 19, 18.6 | v1's `IOrderMessageProcessor` contradicted its own layering rule and would have failed the architecture test it also specified. |
+
+## New finding surfaced while folding
+
+| # | Change | Sections | Rationale |
+| --- | --- | --- | --- |
+| 6 | Required transaction request bodies to be a pure function of the event; `ExpirationEpochSeconds` and `CreatedAtUtc` now derive from `occurredAtUtc`, and `IOrderCommandStore` no longer takes a clock | 5.6, 9.5, 9.6, 10.5, 20 | This falls directly out of correction 4. A deterministic `ClientRequestToken` combined with a wall-clock TTL or `CreatedAtUtc` means two attempts milliseconds apart build different request bodies, and DynamoDB rejects the second with `IdempotentParameterMismatchException` — turning a routine retry of a valid event into a hard error. v1 passed `DateTimeOffset now` into the store, which made this near-certain. |
+
+## High-value corrections
+
+| # | Change | Sections | Rationale |
+| --- | --- | --- | --- |
+| 7 | Adopted `ReturnValuesOnConditionCheckFailure = ALL_OLD` and removed the post-cancellation read | 5.3, 5.5, 10.6 | Saves a round-trip on the most common retry path and closes a TOCTOU window that v1 left unspecified. |
+| 8 | Added the null-`Item` rule: classify as transient, never infer duplicate or conflict | 5.5, 11, 18.1 | TTL can sweep the conflicting record between condition evaluation and response. |
+| 9 | Gated permanent-failure metrics on `ApproximateReceiveCount == 1` | 11.1, 13, 15 | `maxReceiveCount = 5` meant one poison message emitted five data points against a "greater than zero" alarm. |
+| 10 | Required `SQSBatchResponse` registration in the serializer context, with a serialization round-trip test | 10.9, 18.1, 20 | An unregistered response type serialises to `{}`, which Lambda reads as an empty failure list — every failed record silently deleted, no error logged, and object-level unit tests all green. |
+| 11 | Forbade null, empty, and duplicate `itemIdentifier` values | 10.8, 18.1 | An unrecognised identifier makes Lambda reprocess the entire batch, converting a one-record failure into a ten-record replay. |
+
+## Medium corrections
+
+| # | Change | Sections |
+| --- | --- | --- |
+| 12 | Split integration testing: `amazon/dynamodb-local` for transactions, LocalStack for SQS only | 8, 18.3, 6.2 |
+| 13 | Made OTel and X-Ray active tracing mutually exclusive; set realistic expectations for .NET auto-instrumentation | 9.3, 14, 18.4 |
+| 14 | Added `DeadlineDeferred` as a distinct outcome and documented receive-count burn from deadline pressure | 10.7, 10.8, 11, 15 |
+| 15 | Removed `Outcome` as a metric dimension | 13 |
+| 16 | Added CloudWatch Logs ingestion and 2× transactional write cost to the cost model | 13 |
+| 17 | Moved the Lambda runtime identifier into `EnvironmentConfig` | 8.1, 9.3, 21 |
+
+## Minor corrections
+
+| # | Change | Sections |
+| --- | --- | --- |
+| 18 | Fixed heading hierarchy throughout; epics became H3 rather than H1 (section since removed, see change 32) | all |
+| 19 | Defined `ParseResult`, `ValidationResult`, `MessageProcessingResult`, and `ProcessingContext` | 10.2, 10.3, 10.7 |
+| 20 | Unified result modelling on closed record hierarchies with `private protected` constructors | 10.2, 10.5, 20 |
+| 21 | Clarified that the ESM ignores `ReceiveMessageWaitTimeSeconds` | 9.1 |
+| 22 | Stated the consequence of tolerating unknown fields — they are excluded from both hashes | 6.1, 18.1 |
+| 23 | Made the UTC rule testable (`Offset == TimeSpan.Zero`) and added a configurable skew window | 6.1, 10.3 |
+| 24 | Reconciled the repository name to `aws-dotnet-lambda-sqs-idempotency` | 19, 22.1 |
+| 25 | Added the `MaxConcurrency <= ReservedConcurrency` invariant with a CDK assertion | 9.4, 18.4, 21 |
+
+## Delivery plan changes
+
+| # | Change | Sections |
+| --- | --- | --- |
+| 26 | Story 1.3 expanded to settle keys, scopes, and hashes before any table schema is written; ADR 0005 added | 19, backlog |
+| 27 | New Story 2.0 pulls the DynamoDB container harness forward from Epic 6, because Story 2.3's acceptance criteria are otherwise unevaluable | backlog |
+| 28 | Added the republish scenario to samples, E2E tests, demo assets, and the DoD | 17.4, 18.5, 19, 22, 24 |
+
+## Backlog audit (specification v2.1)
+
+Found by auditing the created GitHub issues against the spec's own deliverables.
+
+| # | Change | Sections | Rationale |
+| --- | --- | --- | --- |
+| 29 | Added Story 8.3 (architecture, threat, cost, and testing documents) and Story 8.4 (ADRs 0001–0004) | backlog | Security Requirements required a threat model, Metrics Specification required a cost model, and Repository Structure listed four documents and five ADRs — but no story owned any of them. Milestone 5's description promised "Architecture decisions, Threat and cost models" while containing only three stories, none of which produced them. Only ADR 0005 had an owner, via Story 1.3. |
+| 30 | Added acceptance criteria to Stories 9.1–9.4 | backlog | They were the only four of thirty-one stories with tasks but no criteria, so nothing could be objectively closed. Being post-V1 is a reason to defer them, not a reason to leave them unfalsifiable. |
+| 31 | Named the owning story against each Milestone 5 line item | backlog | Makes the milestone auditable against the backlog rather than aspirational. |
+
+## Backlog moved out of the specification (v3)
+
+| # | Change | Sections | Rationale |
+| --- | --- | --- | --- |
+| 32 | Removed the Epics and User Stories section and the Suggested Delivery Sequence section. Replaced them with Delivery, a pointer to the GitHub backlog. Renumbered the two sections that followed. | Delivery, Definition of Done, Final Positioning | The two sections were 609 lines, 30% of the document, restating a backlog that GitHub now holds with state, ownership, dependencies, and progress that markdown cannot represent. They had already drifted twice: Stories 8.3 and 8.4 had to be written in both places, and the Epic 8 checklist went stale as soon as they were added. A specification and a plan have different lifecycles, and keeping both in one file guarantees one of them is wrong. |
+| 33 | Moved the two load-bearing ordering constraints into the design sections that argue them | 5.4, 18.3, 23 | Story ordering that follows from a design decision belongs beside the decision. Ordering that is merely scheduling belongs in the tracker. |
+
+## Editorial pass and review findings (v3)
+
+| # | Change | Sections | Rationale |
+| --- | --- | --- | --- |
+| 34 | Removed every section symbol in favour of named references, and every colon outside code, tables and links | all | Section numbers break silently when sections move, and the renumbering in change 32 had already invalidated some. Names survive it. |
+| 35 | Promoted 29 standalone bold labels to headings at one level below their parent | all | They were headings in everything but markup, which `MD036` correctly flagged. The document now runs H1 to H4 with no skipped level. |
+| 36 | Adopted markdownlint with a committed configuration and a CI workflow, and hard-wrapped prose at 100 columns | all | Formatting drift is cheaper to prevent than to argue about. Every non-default rule carries a comment saying why. |
+| 37 | Renamed the file from `spec.md` to `system-specification.md` | 19 | The old name said nothing about which of the planned documents it was. |
+| 38 | Repaired eight sentences broken by the colon removal, and one duplicated word left by a section-name substitution | 4, 5.8, 6.2, 10.9, 12, 13, 15, 22, 24 | Mechanical edits produced ungrammatical prose such as "The recommended extension is." Found by re-reading the whole document rather than by the linter, which cannot see it. |
+| 39 | Declared `OrderCreatedV1` and `OrderData` | 6 | Every other type crossing a component boundary was defined in full, but the one the entire contract turns on appeared only in signatures. |
+| 40 | Required committed known-answer hash vectors | 6.3, 18.1 | The previous test compared two hashes computed in the same process, which move together when the serializer changes. Only a fixed expected digest catches a canonicalisation change on a runtime upgrade, and such a change silently reclassifies every replay as a conflict. |
+| 41 | Added a contract rule for `causationId` | 6.1 | It sits inside `EnvelopeSha256` and therefore affects classification, but no rule said whether it was required or nullable. |
+| 42 | Removed the `Status` attribute from the idempotency record | 9.6 | It can only ever hold one value under a transactional design. A status field exists to distinguish an in-flight claim from a completed one, which is the mark-then-write pattern this specification rejects. |
+| 43 | Widened alarm 7 to the sum of `OrdersProcessed` and `DuplicateEvents` | 15 | Alarming on new orders alone fires during a healthy replay storm, where every record is processed correctly and no new order is created. |
+| 44 | Fixed the handler style as a class library, not an executable assembly | 10.9 | The composition root said "constructor or executable startup code", leaving a decision that changes the entry point unmade. |
+| 45 | Required every alarm threshold to carry a concrete value before the [Definition of Done](delivery.md#definition-of-done) | 15 | Several read "an agreed threshold" with no number and no owner. |
+
+## Split into per-topic documents (v3)
+
+| # | Change | Documents | Rationale |
+| --- | --- | --- | --- |
+| 46 | Split the single 1716-line specification into twelve per-topic documents plus an index at `docs/README.md` | all | The repository layout already planned `architecture.md`, `correctness-model.md` and `testing-strategy.md` as separate files, and Story 8.3 was tasked with writing them. Leaving one large file guaranteed that story would copy sections into those names, recreating the duplication that change 32 removed. Splitting now makes the planned filenames the only home for that content. |
+| 47 | Converted every cross-reference from a bare section name into a markdown link | all | Named references survived renumbering but gave the reader nothing to click, and across files they would have been unusable. All internal links are checked for a resolving file and anchor. |
+| 48 | Renamed two headings that duplicated their file title | architecture, delivery | `High-Level Architecture` inside `architecture.md` became `System Diagram`, and `Delivery` inside `delivery.md` became `Backlog`. |
