@@ -9,8 +9,9 @@ failing messages move to a dead-letter queue.
 
 ## Status
 
-**Design complete. Implementation not started.** The specification is finished and reviewed, the
-backlog exists as GitHub issues, and `src/` is empty. Nothing here is deployable yet.
+**Design complete. Implementation started.** The specification is finished and reviewed, the backlog
+exists as GitHub issues, and the solution now restores, builds and tests from the repository root.
+The projects are still skeletons — no order is processed and nothing is deployable yet.
 
 Progress is tracked through the
 [milestones](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/milestones), which run
@@ -63,9 +64,23 @@ control. Payload versioning. Correlation and causation. Transactional outbox as 
 
 ## Getting started
 
-There is no code to run yet. Once the first milestone lands this section will carry prerequisites,
-local test instructions, deployment, a demonstration of duplicate suppression and dead-letter
-handling, and teardown.
+The only prerequisite so far is the .NET SDK pinned in [`global.json`](global.json).
+
+```bash
+dotnet restore ReliableOrders.slnx
+dotnet build ReliableOrders.slnx -c Release
+dotnet test ReliableOrders.slnx -c Release
+```
+
+Formatting is verified by the build rather than by a separate step, so a layout violation is a build
+error. Fix one with `dotnet format ReliableOrders.slnx`.
+
+Package versions live in [`Directory.Packages.props`](Directory.Packages.props) and the resolved
+graph is committed as a `packages.lock.json` per project. After changing a package, restore and
+commit the regenerated lock files.
+
+There is nothing to deploy yet. Once the first milestone lands this section will carry deployment, a
+demonstration of duplicate suppression and dead-letter handling, and teardown.
 
 Until then, [Architecture](docs/architecture.md) describes every component and its contract, and
 [Infrastructure](docs/infrastructure.md) specifies every AWS resource the CDK stack creates.

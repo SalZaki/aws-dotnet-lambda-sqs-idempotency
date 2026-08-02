@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ReliableOrders.ArchitectureTests</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <!--
+    ReliableOrders.Core is the only project reference, and that is the mechanism the layering test
+    depends on rather than a detail of it. The build copies Core's transitive closure into this
+    project's output directory, so an AWS package added anywhere under Core surfaces as a file here.
+    Referencing ReliableOrders.Aws or ReliableOrders.Function would put AWS assemblies in the same
+    directory and make the test permanently green.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ReliableOrders.Core\ReliableOrders.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    Core's lock file is the authority on what Core resolves, including packages marked
+    PrivateAssets="all" that never reach this output directory as assemblies. Copying it here lets
+    the layering test read it without knowing repository paths at run time.
+  -->
+  <ItemGroup>
+    <None Include="..\..\src\ReliableOrders.Core\packages.lock.json"
+          Link="ReliableOrders.Core.packages.lock.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>

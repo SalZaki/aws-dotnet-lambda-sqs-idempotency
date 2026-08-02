@@ -1,0 +1,76 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <IsPackable>false</IsPackable>
+    <!--
+      GenerateDocumentationFile is on everywhere, including test projects where it looks pointless.
+      IDE0005, unused using, only runs during build when the documentation file is generated, and
+      turning this off for tests disables that check there.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    InvariantGlobalization is a behavioural choice, not a build setting, and it is set repository-wide
+    on purpose so tests observe what the Lambda observes. Culture-sensitive parsing and comparison
+    behave the same everywhere, which is what canonical hashing needs; the managed runtime also skips
+    loading ICU, which helps cold start. The cost lands on Story 1.2: currency and identifier
+    validation must not lean on culture data or RegionInfo. Story 8.4 should record this as an ADR.
+  -->
+  <PropertyGroup>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!--
+    Restore fails on a dependency with a known vulnerability rather than warning. Transitive
+    packages are audited too, because an AWS SDK or test dependency is as reachable as a direct one.
+  -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <!--
+      NU1900 is "could not reach the vulnerability database", not "a vulnerability was found".
+      Warnings are errors here, so leaving it promoted makes every build depend on nuget.org being
+      reachable: with an unreachable source and every package already in the global cache, restore
+      exits 1 on NU1900 alone. The findings themselves, NU1901 through NU1904, stay fatal.
+    -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1900</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <!--
+    A committed packages.lock.json per project is what lets CI restore in locked mode, so the
+    resolved transitive graph is the one that was reviewed. Regenerate by restoring after any package
+    change; CI will fail rather than silently accept a drifted graph.
+  -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <!--
+    Nothing here is published to NuGet, so IsPackable is false above and packaging-only metadata such
+    as PackageLicenseExpression is absent. What remains reaches the compiled assembly: Authors and
+    Product become AssemblyCompany and AssemblyProduct, which is what an operator reads off a
+    deployed Lambda, and RepositoryUrl feeds source linking.
+  -->
+  <PropertyGroup>
+    <Authors>Sal Zaki</Authors>
+    <Product>Reliable Orders</Product>
+    <RepositoryUrl>https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('Tests'))">
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+</Project>

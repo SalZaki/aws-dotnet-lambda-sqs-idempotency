@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ReliableOrders.Function</RootNamespace>
+    <AWSProjectType>Lambda</AWSProjectType>
+    <Description>
+      Lambda composition root. A class-library handler, not an executable assembly: the managed
+      runtime loads the assembly and the serializer arrives by assembly-level attribute. See the
+      Composition Root section of docs/architecture.md.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ReliableOrders.Core\ReliableOrders.Core.csproj" />
+    <ProjectReference Include="..\ReliableOrders.Aws\ReliableOrders.Aws.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Amazon.Lambda.Core" />
+    <PackageReference Include="Amazon.Lambda.SQSEvents" />
+    <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+</Project>

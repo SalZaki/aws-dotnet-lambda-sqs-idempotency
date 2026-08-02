@@ -1,0 +1,62 @@
+## Build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+
+## Test and coverage output
+[Tt]est[Rr]esults/
+*.trx
+*.coverage
+*.coverlet.json
+coverage*.json
+coverage*.xml
+coverage*.info
+
+## Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+## NuGet
+# packages.lock.json is committed and nothing here matches it, so no negation is needed.
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+## AWS CDK
+# cdk.context.json is deliberately NOT ignored. It caches environmental lookups made during synth,
+# such as availability zones and AMI IDs. Uncommitted, every machine resolves them afresh and synth
+# stops being reproducible, which is the opposite of what the pinned SDK and lock files are for.
+cdk.out/
+.cdk.staging/
+
+## AWS Lambda tooling
+*.zip
+!samples/**/*.zip
+
+## Local environment. Never commit credentials; see docs/security.md.
+.env
+.env.*
+# The example file carries variable names and no values, and is meant to be read by contributors.
+!.env.example
+*.pem
+*.key
+aws-lambda-tools-defaults.local.json
+appsettings.Development.local.json
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Node, used only by the markdownlint workflow
+node_modules/

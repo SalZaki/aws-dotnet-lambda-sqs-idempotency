@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/build/">
+    <File Path=".editorconfig" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="NuGet.config" />
+    <File Path="global.json" />
+    <File Path="tests/Directory.Build.props" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/ReliableOrders.Aws/ReliableOrders.Aws.csproj" />
+    <Project Path="src/ReliableOrders.Core/ReliableOrders.Core.csproj" />
+    <Project Path="src/ReliableOrders.Function/ReliableOrders.Function.csproj" />
+    <Project Path="src/ReliableOrders.Publisher/ReliableOrders.Publisher.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ReliableOrders.ArchitectureTests/ReliableOrders.ArchitectureTests.csproj" />
+  </Folder>
+</Solution>

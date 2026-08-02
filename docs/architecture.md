@@ -356,6 +356,7 @@ aws-dotnet-lambda-sqs-idempotency/
 │       ├── Constructs/
 │       └── Stacks/
 ├── tests/
+│   ├── Directory.Build.props           xunit global using, shared by every test project
 │   ├── ReliableOrders.UnitTests/
 │   ├── ReliableOrders.IntegrationTests/
 │   ├── ReliableOrders.ArchitectureTests/
@@ -410,9 +411,13 @@ aws-dotnet-lambda-sqs-idempotency/
 │       ├── markdownlint.yml
 │       └── release.yml
 ├── .editorconfig
+├── .gitattributes
+├── .gitignore
 ├── .markdownlint-cli2.jsonc
 ├── Directory.Build.props
 ├── Directory.Packages.props
+├── NuGet.config
+├── ReliableOrders.slnx
 ├── global.json
 ├── CONTRIBUTING.md
 ├── SECURITY.md
