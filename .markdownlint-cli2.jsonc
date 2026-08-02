@@ -1,0 +1,50 @@
+{
+  // markdownlint configuration. See https://github.com/DavidAnson/markdownlint
+  // for the rule reference, and https://github.com/DavidAnson/markdownlint-cli2
+  // for runner options.
+  "config": {
+    "default": true,
+
+    // MD013 line-length. Prose is hard-wrapped at 100 columns so that diffs
+    // stay readable line by line. Tables and code blocks are exempt: a table
+    // row cannot be wrapped without breaking it, and code samples must stay
+    // byte-accurate.
+    "MD013": {
+      "line_length": 100,
+      "tables": false,
+      "code_blocks": false,
+      "headings": true
+    },
+
+    // MD024 no-duplicate-heading. Sibling-only, so repeated subsection names
+    // under different parents are allowed.
+    "MD024": { "siblings_only": true },
+
+    // MD029 ol-prefix. Ordered lists in this document are numbered sequentially
+    // because several are read as step sequences and cited by number.
+    "MD029": { "style": "ordered" },
+
+    // MD033 inline-html. No raw HTML is expected; the mermaid diagram is a
+    // fenced block, not an embed.
+    "MD033": true,
+
+    // MD046 code-block-style. Fenced throughout, never indented.
+    "MD046": { "style": "fenced" },
+
+    // MD048 code-fence-style. Backticks throughout.
+    "MD048": { "style": "backtick" },
+
+    // MD049/MD050 emphasis and strong style, pinned so the file stays uniform.
+    "MD049": { "style": "asterisk" },
+    "MD050": { "style": "asterisk" }
+  },
+
+  "globs": [
+    "**/*.md"
+  ],
+
+  "ignores": [
+    "node_modules/**",
+    ".github/ISSUE_TEMPLATE/**"
+  ]
+}
