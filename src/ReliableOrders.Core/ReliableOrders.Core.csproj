@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ReliableOrders.Core</RootNamespace>
+    <Description>
+      Transport-neutral domain: event contract, validation, canonical hashing, idempotency model and
+      message processing. This project must never reference AWSSDK.* or Amazon.Lambda.*; the rule is
+      asserted by ReliableOrders.ArchitectureTests.
+    </Description>
+  </PropertyGroup>
+
+</Project>

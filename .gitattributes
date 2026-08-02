@@ -1,0 +1,24 @@
+# The .editorconfig asks for LF; this is what makes it true in the object store regardless of the
+# checkout platform. A shell script committed with CRLF from Windows fails in CI with a
+# "bad interpreter" error, which is slow to diagnose.
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.cs text eol=lf diff=csharp
+*.csproj text eol=lf
+*.slnx text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+*.json text eol=lf
+*.jsonc text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.snk binary
+*.pfx binary

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ReliableOrders.Publisher</RootNamespace>
+    <Description>
+      Command-line publisher used to drive the demonstration flows: valid, duplicate, republished,
+      conflicting and malformed order events.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ReliableOrders.Core\ReliableOrders.Core.csproj" />
+  </ItemGroup>
+
+</Project>

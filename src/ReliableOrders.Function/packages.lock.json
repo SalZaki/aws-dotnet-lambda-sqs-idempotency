@@ -1,0 +1,67 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "Amazon.Lambda.Core": {
+        "type": "Direct",
+        "requested": "[3.3.0, )",
+        "resolved": "3.3.0",
+        "contentHash": "CZKlX8ZDMi6aKPo5lPAjmsJFDXNJHX00aiiYeRQOEszP8cjx6qklBvTPj4qpr4dlp3YYQjmB87CqAiWV7vk2fA=="
+      },
+      "Amazon.Lambda.Serialization.SystemTextJson": {
+        "type": "Direct",
+        "requested": "[3.0.0, )",
+        "resolved": "3.0.0",
+        "contentHash": "8lKS2w8Ww+Kq41mRmedL3lYLVr+UE0tzN2FwOigxKe+hzDbWJIMXZwVHwf53RsdFsYZlaTmW4WHE56W/1Fk3Hg==",
+        "dependencies": {
+          "Amazon.Lambda.Core": "3.0.0"
+        }
+      },
+      "Amazon.Lambda.SQSEvents": {
+        "type": "Direct",
+        "requested": "[3.0.0, )",
+        "resolved": "3.0.0",
+        "contentHash": "FTWf7ODv7+hwnqHREYQWntNDJsu4WWtTcEZoji0e5QiChMMrMyfYf07E7flBanolf8dTY6jfVdDfC816uGkzdA=="
+      },
+      "Microsoft.Extensions.DependencyInjection": {
+        "type": "Direct",
+        "requested": "[10.0.0, )",
+        "resolved": "10.0.0",
+        "contentHash": "f0RBabswJq+gRu5a+hWIobrLWiUYPKMhCD9WO3sYBAdSy3FFH14LMvLVFZc2kPSCimBLxSuitUhsd6tb0TAY6A==",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0"
+        }
+      },
+      "AWSSDK.Core": {
+        "type": "Transitive",
+        "resolved": "4.0.100.9",
+        "contentHash": "OPYy41jZjXwxxcYRotaq24HDrwUnVtBB/mvg1IwB9D1ICXAtHqMa1sp2hpmlVJCZwjlcrPcTCJIejInvV1vp5g=="
+      },
+      "Microsoft.Extensions.DependencyInjection.Abstractions": {
+        "type": "Transitive",
+        "resolved": "10.0.0",
+        "contentHash": "L3AdmZ1WOK4XXT5YFPEwyt0ep6l8lGIPs7F5OOBZc77Zqeo01Of7XXICy47628sdVl0v/owxYJTe86DTgFwKCA=="
+      },
+      "reliableorders.aws": {
+        "type": "Project",
+        "dependencies": {
+          "AWSSDK.DynamoDBv2": "[4.0.102.1, )",
+          "Amazon.Lambda.SQSEvents": "[3.0.0, )",
+          "ReliableOrders.Core": "[1.0.0, )"
+        }
+      },
+      "reliableorders.core": {
+        "type": "Project"
+      },
+      "AWSSDK.DynamoDBv2": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.102.1, )",
+        "resolved": "4.0.102.1",
+        "contentHash": "ZxvRoZcMbLeqGm9B4TsYHT6B6PsnIwve+kckPgb2IPuNzPEXzIRpUIlyGuSQg37NFPgkh6/3m4/QD5wkkHFdSg==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.100.9, 5.0.0)"
+        }
+      }
+    }
+  }
+}
