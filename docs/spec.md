@@ -361,7 +361,7 @@ flowchart LR
 
 This is a managed-runtime Lambda, not a custom-runtime Lambda. Native AOT can be explored as a benchmark after the non-AOT implementation is complete and all selected libraries have been verified for trimming and AOT compatibility.
 
-Confirm that the managed .NET 10 runtime identifier is available in the target Region before Story 4.3's acceptance criteria are asserted. The CDK construct reads the runtime from `EnvironmentConfig` (§21) so that falling back to a container image or an earlier managed runtime does not require editing the construct.
+Confirm that the managed .NET 10 runtime identifier is available in the target Region before the CDK assertions in §18.4 depend on it. The CDK construct reads the runtime from `EnvironmentConfig` (§21) so that falling back to a container image or an earlier managed runtime does not require editing the construct.
 
 ---
 
@@ -1338,616 +1338,45 @@ Keep the current name. Specification v1's suggestions (`dotnet-sqs-idempotent-wo
 
 ---
 
-## 23. Epics and User Stories
+## 23. Delivery
 
-### Epic 0: Repository and Engineering Foundation
+The backlog is maintained as GitHub issues, not in this document. A specification
+and a plan have different lifecycles: the design here is stable and reviewed
+through pull requests, while the work carries state, ownership, and ordering that
+markdown cannot represent. Holding both means one of them is always stale.
 
-#### Story 0.1: Initialise the solution
+Structure:
 
-Tasks:
+- Epics are issues labelled `epic`, each also carrying `epic-0` through `epic-9`.
+- Stories are issues labelled `story`, attached to their epic as a sub-issue and
+  carrying the same `epic-N` label plus an area label.
+- Milestones M1 through M6 carry the delivery sequence, in the order given by
+  their descriptions.
+- Epics are deliberately left off milestones. Two of them span several
+  milestones, and an epic closes only after its stories do, so assigning them
+  would understate milestone progress throughout.
+- Ordering constraints are recorded as issue dependencies rather than prose.
 
-- Create solution and projects.
-- Add `global.json`.
-- Add central package management.
-- Add `Directory.Build.props`.
-- Enable nullable references and warnings as errors.
-- Add `.editorconfig`.
-- Add formatting verification.
-- Add baseline README and licence.
+To read the backlog:
 
-Acceptance criteria:
+```bash
+gh issue list --label epic
+gh issue list --label story --milestone "M1: Correctness First"
+gh issue view <n>
+```
 
-- `dotnet restore`, `dotnet build`, and `dotnet test` succeed from the repository root.
-- The pinned SDK is .NET 10.
-- Core references neither `AWSSDK.*` nor `Amazon.Lambda.*`.
+Two ordering constraints are load-bearing, and both are argued where the design
+lives rather than restated here:
 
-#### Story 0.2: Establish open-source governance
-
-Tasks:
-
-- Add contributing guide.
-- Add security policy.
-- Add code of conduct.
-- Add support policy.
-- Add issue and pull request templates.
-- Add decision-record template.
-
-Acceptance criteria:
-
-- A new contributor can identify how to report a bug, propose a change, and report a vulnerability.
+- The key and hash decisions in §5.4 must be settled before any table schema is
+  written, because §9.5 and §9.6 persist their outcome.
+- Transaction classification cannot be verified against an emulator that does not
+  report cancellation reasons faithfully (§18.3).
 
 ---
 
-### Epic 1: Versioned Event Contract, Validation, and Idempotency Model
 
-#### Story 1.1: Define `OrderCreatedV1`
-
-Tasks:
-
-- Create envelope and data records.
-- Add field limits.
-- Add sample JSON, including the republish sample.
-- Add source-generated serializer context for the contract types.
-
-Acceptance criteria:
-
-- Valid sample deserializes.
-- Malformed payload produces a typed `ParseResult.Malformed`.
-- Unknown schema version produces `ParseResult.UnsupportedSchemaVersion`.
-
-#### Story 1.2: Validate order events
-
-Tasks:
-
-- Implement validator.
-- Validate IDs, event type, timestamps, UTC offset, skew window, currency, amount, and description.
-- Return structured failures.
-- Add unit tests.
-
-Acceptance criteria:
-
-- Validation contains no AWS dependencies.
-- Every rule has positive and negative tests.
-- Skew bounds are configuration-driven and use `TimeProvider`.
-
-#### Story 1.3: Fix the idempotency model — keys, scopes, and hashes
-
-This story exists to settle the decisions that Epic 2's stored entities depend on. It must complete before any table schema is written.
-
-Tasks:
-
-- Decide and document the two hash scopes (§5.4) and record ADR `0005-separate-envelope-and-business-hashes`.
-- Define the canonical envelope and canonical data representations, with the data canonicaliser nested inside the envelope canonicaliser.
-- Implement `IPayloadHasher.ComputeHashes` returning both hashes from one traversal.
-- Fix `IdempotencyKey` as the verbatim `eventId`, and confirm the 36-character `ClientRequestToken` budget (§5.6).
-- Establish the request-determinism rule: `ExpirationEpochSeconds` and `CreatedAtUtc` derive from `occurredAtUtc`.
-- Add determinism, cross-process, and unknown-field tests.
-
-Acceptance criteria:
-
-- Semantically identical typed events produce identical hashes across processes.
-- Two events with different `eventId` but identical `data` share a `BusinessSha256` and differ in `EnvelopeSha256`.
-- Business-data changes produce a different `BusinessSha256`.
-- Events differing only in unknown top-level fields hash identically.
-- No canonical representation includes a wall-clock value.
-- ADR 0005 is merged.
-
----
-
-### Epic 2: Transactional Idempotent Persistence
-
-#### Story 2.0: Stand up the DynamoDB container harness
-
-Pulled forward from Epic 6 because Story 2.3's acceptance criteria cannot be evaluated without it.
-
-Tasks:
-
-- Add Testcontainers with the official `amazon/dynamodb-local` image.
-- Provision both tables from the same definitions the CDK constructs use.
-- Add a shared xUnit collection fixture.
-
-Acceptance criteria:
-
-- Transaction-level tests run from a clean machine with Docker and no AWS credentials.
-
-#### Story 2.1: Define persistence result model
-
-Tasks:
-
-- Add `IOrderCommandStore`.
-- Add the closed `OrderWriteResult` hierarchy with `Created`, `Duplicate(Scope)`, `Conflict(Scope, Reason)`, and `TransientFault(Reason)`.
-- Define stored entities for both tables per §9.5 and §9.6.
-
-Acceptance criteria:
-
-- Application logic can classify persistence outcomes without catching AWS exceptions.
-- Switching over `OrderWriteResult` is exhaustive without a default arm.
-
-#### Story 2.2: Implement transactional creation
-
-Tasks:
-
-- Implement two conditional puts in `TransactWriteItems`.
-- Set `ReturnValuesOnConditionCheckFailure = ALL_OLD` on both puts.
-- Derive `ExpirationEpochSeconds` and `CreatedAtUtc` from `occurredAtUtc`.
-- Set `ClientRequestToken` to the verbatim `eventId`.
-- Forward cancellation.
-- Map AWS exceptions per §11.
-
-Acceptance criteria:
-
-- No public API permits mark-then-save sequencing.
-- A new order writes both items atomically.
-- Two request builds for the same event are byte-identical with `TimeProvider` advanced between them.
-- `IOrderCommandStore` accepts no clock parameter.
-
-#### Story 2.3: Classify duplicates and conflicts
-
-Tasks:
-
-- Classify from `CancellationReasons` alone, with no follow-up `GetItem`.
-- Compare `EnvelopeSha256` at index 0 and `BusinessSha256` at index 1.
-- Handle `ConditionalCheckFailed` with a null `Item` as transient.
-- Map `IdempotentParameterMismatchException` to `Conflict(TokenMismatch)`.
-- Add concurrent integration tests against `dynamodb-local`.
-
-Acceptance criteria:
-
-- Repeated identical events are successful duplicates.
-- Republished orders under a new event ID are `Duplicate(Order)`, not conflicts.
-- Reused keys with different data are conflicts.
-- Concurrent identical calls produce one order.
-- No code path issues a read after a cancelled transaction.
-
----
-
-### Epic 3: Lambda SQS Batch Processing
-
-#### Story 3.1: Process one message
-
-Tasks:
-
-- Define `IncomingMessage` in Core and map from `SQSEvent.SQSMessage` in the Lambda project.
-- Add parser, validator, hasher, and persistence orchestration.
-- Add explicit processing result including `DeadlineDeferred`.
-- Add logging scopes.
-- Add metrics with the §11.1 receive-count gate.
-
-Acceptance criteria:
-
-- All expected outcomes are represented without relying on string matching.
-- The architecture test confirms Core references no AWS package.
-
-#### Story 3.2: Implement partial batch response
-
-Tasks:
-
-- Process all records independently.
-- Return only failed SQS message IDs.
-- Guard against null, empty, and duplicate identifiers.
-- Add deadline safety margin sized from p99 latency.
-- Add mixed-batch tests.
-
-Acceptance criteria:
-
-- One failed item does not cause successful items to be retried.
-- Duplicate items are treated as successful.
-- A malformed identifier can never be emitted.
-
-#### Story 3.3: Add composition root
-
-Tasks:
-
-- Register clients and services once.
-- Load typed environment configuration.
-- Validate configuration during cold start.
-- Add source-generated serialization for contract types **and** `SQSBatchResponse`.
-
-Acceptance criteria:
-
-- Missing required configuration causes a clear initialization failure naming the variable.
-- AWS clients are reused.
-- A failure response survives a round-trip through the configured `ILambdaSerializer` with `batchItemFailures` intact in the serialised bytes.
-
----
-
-### Epic 4: AWS CDK Infrastructure
-
-#### Story 4.1: Create messaging resources
-
-Tasks:
-
-- Create source queue and DLQ.
-- Compute visibility timeout from `EnvironmentConfig`.
-- Configure encryption, retention, and redrive.
-- Restrict DLQ redrive permissions.
-- Add tags.
-
-Acceptance criteria:
-
-- DLQ retention exceeds source retention.
-- `maxReceiveCount` is at least 5.
-- Visibility timeout equals the §9.1 formula evaluated against the same config the construct consumed.
-
-#### Story 4.2: Create persistence resources
-
-Tasks:
-
-- Create Orders and Idempotency tables.
-- Enable TTL on `ExpirationEpochSeconds`.
-- Configure environment-specific retention and PITR.
-- Grant least-privilege permissions.
-
-Acceptance criteria:
-
-- Ephemeral and persistent environments have different removal policies.
-- The Lambda cannot access unrelated tables.
-
-#### Story 4.3: Create Lambda and event source mapping
-
-Tasks:
-
-- Create the .NET 10 Lambda with the runtime identifier from config.
-- Configure timeout, memory, logs, and concurrency.
-- Disable X-Ray active tracing.
-- Add SQS event source.
-- Enable `ReportBatchItemFailures`.
-- Add environment variables.
-
-Acceptance criteria:
-
-- CDK assertion tests verify all critical properties in §18.4.
-- Maximum concurrency does not exceed reserved concurrency.
-
----
-
-### Epic 5: Observability and Operations
-
-#### Story 5.1: Add structured logging
-
-Tasks:
-
-- Configure JSON logs.
-- Define event IDs.
-- Add logging scopes.
-- Redact sensitive content, including returned DynamoDB items.
-- Configure retention.
-
-Acceptance criteria:
-
-- Logs can be queried by event, order, correlation, and SQS message IDs.
-- Raw message bodies and full DynamoDB items are not logged.
-
-#### Story 5.2: Add EMF metrics
-
-Tasks:
-
-- Add record and batch metrics.
-- Use `Service` and `Environment` dimensions only.
-- Gate permanent-failure metrics on first receipt.
-- Add metric tests.
-
-Acceptance criteria:
-
-- Partial failures are observable even when the Lambda invocation is successful.
-- A poison message contributes exactly one `ValidationFailures` data point across all five deliveries.
-
-#### Story 5.3: Add OpenTelemetry
-
-Tasks:
-
-- Add the ADOT collector layer and manual OTel SDK wiring.
-- Instrument AWS SDK calls.
-- Add application spans.
-- Document trace propagation and its dependence on the publisher.
-
-Acceptance criteria:
-
-- A processed event produces a trace containing persistence activity.
-- Exactly one trace pipeline is active; X-Ray active tracing is off.
-
-#### Story 5.4: Add dashboard, alarms, and runbooks
-
-Tasks:
-
-- Create CloudWatch dashboard.
-- Add required alarms including the composite no-progress alarm and deadline deferrals.
-- Write DLQ and backlog runbooks.
-- Write idempotency-conflict runbook covering both `Conflict(Event)` and `Conflict(Order)`.
-
-Acceptance criteria:
-
-- An operator can diagnose and safely redrive a failed message using the documentation.
-- The conflict runbook explains which hash diverged and what that implies about the publisher.
-
----
-
-### Epic 6: Automated Testing
-
-#### Story 6.1: Unit test core logic
-
-Tasks:
-
-- Test parsing, validation, hashing, classification, batch mapping, and serialization.
-- Add coverage reporting.
-- Test cancellation and time.
-
-Acceptance criteria:
-
-- Every case in §18.1 is implemented.
-- Tests do not require AWS or Docker.
-
-#### Story 6.2: Complete the container integration suite
-
-The DynamoDB harness arrives in Story 2.0. This story adds SQS and the end-to-end local path.
-
-Tasks:
-
-- Add LocalStack for SQS.
-- Provision queues.
-- Test SQS publishing and batch response mapping.
-- Document why DynamoDB uses `dynamodb-local` and SQS uses LocalStack.
-
-Acceptance criteria:
-
-- Integration tests run from a clean machine with Docker.
-- No transaction-cancellation assertion runs against LocalStack.
-
-#### Story 6.3: Add real-AWS end-to-end tests
-
-Tasks:
-
-- Deploy unique stack.
-- Send scenario messages including the republish case.
-- Verify DynamoDB, DLQ, logs, and metrics.
-- Destroy stack reliably.
-
-Acceptance criteria:
-
-- The critical delivery and retry behaviour is verified against AWS, not only an emulator.
-- Metric gating is confirmed against real redelivery.
-
----
-
-### Epic 7: CI/CD and Supply-Chain Security
-
-#### Story 7.1: Add pull-request CI
-
-Tasks:
-
-- Build, test, format, synth, scan, and publish reports.
-- Pin actions.
-- Protect forked pull requests from deployment credentials.
-
-Acceptance criteria:
-
-- A pull request cannot merge when required quality checks fail.
-
-#### Story 7.2: Add AWS OIDC deployment
-
-Tasks:
-
-- Create restricted trust policy.
-- Add development deployment.
-- Add protected release deployment.
-- Remove long-lived AWS secrets.
-
-Acceptance criteria:
-
-- GitHub obtains short-lived credentials.
-- Only approved workflow identities can assume the deployment role.
-
-#### Story 7.3: Add repository security automation
-
-Tasks:
-
-- Enable CodeQL.
-- Enable Dependabot.
-- Add dependency review.
-- Add `cdk-nag`.
-- Document suppressions.
-
-Acceptance criteria:
-
-- Critical security findings block release.
-
----
-
-### Epic 8: Documentation and Demonstration
-
-#### Story 8.1: Complete the README
-
-Tasks:
-
-- Add architecture, setup, deploy, demo, and destroy instructions.
-- Explain exactly-once versus idempotency.
-- Explain the two hash scopes in plain terms.
-- Include sample commands and expected results.
-
-Acceptance criteria:
-
-- A developer unfamiliar with the repository can reproduce the demo.
-
-#### Story 8.2: Add demonstration assets
-
-Tasks:
-
-- Record valid processing.
-- Record duplicate suppression.
-- Record republish under a new event ID.
-- Record mixed-batch partial failure.
-- Record poison-message DLQ movement.
-- Add dashboard screenshots.
-
-Acceptance criteria:
-
-- The project visibly demonstrates the reliability features it claims.
-
-#### Story 8.3: Write the architecture, threat, cost, and testing documents
-
-Tasks:
-
-- Write `docs/architecture.md` from §7 and §10, including the component diagram and the layering rule.
-- Write `docs/threat-model.md` covering malformed events, replay, idempotency-key reuse, resource exhaustion, logging leakage, and compromised CI (§16).
-- Write `docs/cost-model.md` covering CloudWatch Logs ingestion as the dominant driver, DynamoDB transactional writes at 2× WCU, on-demand table cost, and per-million-event estimates (§13).
-- Write `docs/testing-strategy.md` summarising the four test levels and stating why DynamoDB transaction tests use `dynamodb-local` rather than LocalStack (§18.3).
-
-Acceptance criteria:
-
-- Every document referenced in the §19 repository tree exists and is reachable from the README.
-- The threat model names an attacker action, an asset, and a mitigation for each of the six listed threats.
-- The cost model states which single line item dominates and why.
-- No document contradicts §5, §11, or §18.
-
-#### Story 8.4: Record the foundational architecture decisions
-
-Tasks:
-
-- Write ADR `0001-use-sqs-standard-queue` covering standard versus FIFO and the ordering non-goal (§4, §5.1).
-- Write ADR `0002-use-dynamodb-transactions` covering the mark-then-write failure window (§5.2, §5.3).
-- Write ADR `0003-use-dotnet-10-managed-runtime` covering managed runtime versus container image versus Native AOT (§8.1).
-- Write ADR `0004-use-opentelemetry` covering the exclusive choice against X-Ray active tracing (§14).
-- Confirm ADR `0005-separate-envelope-and-business-hashes` from Story 1.3 follows the same template.
-
-Acceptance criteria:
-
-- Each ADR states context, decision, consequences, and alternatives rejected.
-- Each ADR is linked from the README and from the spec section it justifies.
-- ADRs 0001 through 0005 exist and share one template.
-
----
-
-### Epic 9: Advanced Extensions
-
-These are deliberately outside the first complete release.
-
-#### Story 9.1: Permanent-failure quarantine queue
-
-Tasks:
-
-- Route validation failures to a quarantine queue.
-- Preserve the original body and failure metadata.
-- Make quarantine publishing idempotent.
-- Return the source record as failed when quarantine publishing fails.
-- Retire the §11.1 receive-count metric gate once permanent failures no longer retry.
-
-Acceptance criteria:
-
-- A permanently invalid event reaches the quarantine queue on first receipt and is not redelivered to the source queue.
-- A quarantined message retains the original body and carries the failure reason and `ApproximateReceiveCount`.
-- When quarantine publishing fails, the source record is still reported in `BatchItemFailures`.
-- Publishing the same permanent failure twice produces one quarantine message.
-- Permanent-failure metrics are emitted once per distinct message with the §11.1 gate removed.
-
-#### Story 9.2: Transactional outbox
-
-Tasks:
-
-- Store an outbox item in the order transaction.
-- Enable DynamoDB Streams.
-- Publish downstream events.
-- Make the publisher idempotent.
-- Add stream retry and DLQ handling.
-
-Acceptance criteria:
-
-- The order and its outbox item are written in one transaction; neither can exist without the other.
-- Outbox item attributes derive from the event, so the §5.6 determinism rule still holds with three transaction items.
-- A downstream consumer receiving the same outbox record twice produces one side effect.
-- Stream processing failures retry and land in a stream DLQ rather than silently dropping.
-- An end-to-end test proves an order creation results in exactly one downstream publication.
-
-#### Story 9.3: Performance engineering
-
-Tasks:
-
-- Benchmark memory sizes.
-- Benchmark ARM64 and x86_64.
-- Compare normal publishing, ReadyToRun, and Native AOT where compatible.
-- Add load tests and cost-per-million-event estimates.
-
-Acceptance criteria:
-
-- Cold-start and warm p50/p99 are recorded for each memory size and architecture.
-- A recommended memory size and architecture are stated with the measurement that justifies them.
-- Any Native AOT result records which libraries required trimming annotations.
-- Cost per million events is published in `docs/cost-model.md` and reconciles with the measured invocation duration.
-
-#### Story 9.4: Multi-account delivery
-
-Tasks:
-
-- Separate development and production accounts.
-- Use environment-specific OIDC roles.
-- Add approval and promotion controls.
-- Add permissions boundaries and CDK bootstrap hardening.
-
-Acceptance criteria:
-
-- Development and production deploy to different AWS accounts from the same source commit.
-- Each environment has its own OIDC role, and neither role can deploy to the other account.
-- A production deployment requires an approval that a development deployment does not.
-- The CDK bootstrap in both accounts carries a permissions boundary, and `cdk-nag` runs clean or documents every suppression.
-
----
-
-## 24. Suggested Delivery Sequence
-
-### Milestone 1: Correctness First
-
-- Repository foundation
-- Event contract
-- Validation
-- Two-scope idempotency model, canonical hashing, and ADR 0005
-- DynamoDB container harness
-- Transactional persistence
-- Duplicate/conflict classification
-- Unit and concurrency tests
-
-### Milestone 2: AWS Execution Path
-
-- Lambda handler and transport mapping
-- Partial batch response
-- SQS, DLQ, and DynamoDB CDK resources
-- CDK tests
-- SQS integration tests
-
-### Milestone 3: Operability
-
-- JSON logs
-- EMF metrics with receive-count gating
-- OpenTelemetry
-- Dashboard
-- Alarms
-- Runbooks
-
-### Milestone 4: Delivery Automation
-
-- Pull-request CI
-- OIDC deployment
-- Ephemeral AWS end-to-end tests
-- Security scanning
-- Protected releases
-
-### Milestone 5: Open-Source Polish
-
-- README (Story 8.1)
-- Architecture, threat, cost, and testing documents (Story 8.3)
-- Architecture decision records 0001–0004 (Story 8.4)
-- Contribution files (Story 0.2)
-- Demo recording (Story 8.2)
-- First tagged release
-
-### Milestone 6: Advanced Reliability Patterns
-
-- Quarantine queue
-- Transactional outbox
-- Performance and AOT comparison
-- Multi-account deployment
-
----
-
-## 25. Definition of Done
+## 24. Definition of Done
 
 A release is complete when:
 
@@ -1978,7 +1407,7 @@ A release is complete when:
 
 ---
 
-## 26. Final Positioning
+## 25. Final Positioning
 
 This project should be presented as:
 
@@ -2033,7 +1462,7 @@ Changes from specification v1. Each entry states what changed and why.
 
 | # | Change | Sections |
 |---|---|---|
-| 18 | Fixed heading hierarchy throughout; epics are now H3 under §23 rather than H1 | all |
+| 18 | Fixed heading hierarchy throughout; epics became H3 rather than H1 (section since removed, see change 32) | all |
 | 19 | Defined `ParseResult`, `ValidationResult`, `MessageProcessingResult`, and `ProcessingContext` | 10.2, 10.3, 10.7 |
 | 20 | Unified result modelling on closed record hierarchies with `private protected` constructors | 10.2, 10.5, 20 |
 | 21 | Clarified that the ESM ignores `ReceiveMessageWaitTimeSeconds` | 9.1 |
@@ -2046,9 +1475,9 @@ Changes from specification v1. Each entry states what changed and why.
 
 | # | Change | Sections |
 |---|---|---|
-| 26 | Story 1.3 expanded to settle keys, scopes, and hashes before any table schema is written; ADR 0005 added | 23 Epic 1, 19 |
-| 27 | New Story 2.0 pulls the DynamoDB container harness forward from Epic 6, because Story 2.3's acceptance criteria are otherwise unevaluable | 23 Epic 2, Epic 6 |
-| 28 | Added the republish scenario to samples, E2E tests, demo assets, and the DoD | 17.4, 18.5, 19, 22, 23 Epic 8, 25 |
+| 26 | Story 1.3 expanded to settle keys, scopes, and hashes before any table schema is written; ADR 0005 added | 19, backlog |
+| 27 | New Story 2.0 pulls the DynamoDB container harness forward from Epic 6, because Story 2.3's acceptance criteria are otherwise unevaluable | backlog |
+| 28 | Added the republish scenario to samples, E2E tests, demo assets, and the DoD | 17.4, 18.5, 19, 22, 24 |
 
 ### A.7 Backlog audit (specification v2.1)
 
@@ -2056,6 +1485,14 @@ Found by auditing the created GitHub issues against the spec's own deliverables.
 
 | # | Change | Sections | Rationale |
 |---|---|---|---|
-| 29 | Added Story 8.3 (architecture, threat, cost, and testing documents) and Story 8.4 (ADRs 0001–0004) | 23 Epic 8, 24 | §16 required a threat model, §13 required a cost model, and §19 listed four documents and five ADRs — but no story owned any of them. Milestone 5's description promised "Architecture decisions, Threat and cost models" while containing only three stories, none of which produced them. Only ADR 0005 had an owner, via Story 1.3. |
-| 30 | Added acceptance criteria to Stories 9.1–9.4 | 23 Epic 9 | They were the only four of thirty-one stories with tasks but no criteria, so nothing could be objectively closed. Being post-V1 is a reason to defer them, not a reason to leave them unfalsifiable. |
-| 31 | Named the owning story against each Milestone 5 line item | 24 | Makes the milestone auditable against the backlog rather than aspirational. |
+| 29 | Added Story 8.3 (architecture, threat, cost, and testing documents) and Story 8.4 (ADRs 0001–0004) | backlog | §16 required a threat model, §13 required a cost model, and §19 listed four documents and five ADRs — but no story owned any of them. Milestone 5's description promised "Architecture decisions, Threat and cost models" while containing only three stories, none of which produced them. Only ADR 0005 had an owner, via Story 1.3. |
+| 30 | Added acceptance criteria to Stories 9.1–9.4 | backlog | They were the only four of thirty-one stories with tasks but no criteria, so nothing could be objectively closed. Being post-V1 is a reason to defer them, not a reason to leave them unfalsifiable. |
+| 31 | Named the owning story against each Milestone 5 line item | backlog | Makes the milestone auditable against the backlog rather than aspirational. |
+
+### A.8 Backlog moved out of the specification (v3)
+
+| # | Change | Sections | Rationale |
+|---|---|---|---|
+| 32 | Removed §23 Epics and User Stories and §24 Suggested Delivery Sequence. Replaced with §23 Delivery, a pointer to the GitHub backlog. Renumbered the two sections that followed. | 23, 24, 25 | The two sections were 609 lines, 30% of the document, restating a backlog that GitHub now holds with state, ownership, dependencies, and progress that markdown cannot represent. They had already drifted twice: Stories 8.3 and 8.4 had to be written in both places, and the Epic 8 checklist went stale as soon as they were added. A specification and a plan have different lifecycles, and keeping both in one file guarantees one of them is wrong. |
+| 33 | Moved the two load-bearing ordering constraints into the design sections that argue them | 5.4, 18.3, 23 | Story ordering that follows from a design decision belongs beside the decision. Ordering that is merely scheduling belongs in the tracker. |
+
