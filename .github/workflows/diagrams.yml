@@ -1,0 +1,40 @@
+name: diagrams
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/diagrams/**'
+      - 'scripts/render-diagrams.sh'
+      - '.github/workflows/diagrams.yml'
+  pull_request:
+    paths:
+      - 'docs/diagrams/**'
+      - 'scripts/render-diagrams.sh'
+      - '.github/workflows/diagrams.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagrams-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to an immutable commit SHA so a moved tag cannot change what runs.
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      # Fails when a committed SVG is missing or does not match its .mmd source,
+      # so a diagram edit cannot be merged without the regenerated image.
+      - name: Verify diagrams are current
+        run: ./scripts/render-diagrams.sh --check
