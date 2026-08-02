@@ -1,5 +1,8 @@
 # Security Requirements
 
+Design-time controls the implementation must satisfy. Threats, attacker
+profiles and mitigations belong in `docs/threat-model.md`, which is not written yet.
+
 - Use GitHub OIDC; do not store long-lived AWS access keys in GitHub.
 - Restrict the OIDC role trust policy to the repository, branch or tag, and GitHub environment.
 - Separate CI permissions from deployment permissions.

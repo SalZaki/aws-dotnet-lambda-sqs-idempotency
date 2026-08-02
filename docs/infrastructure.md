@@ -23,7 +23,7 @@
 | Tracing | OpenTelemetry with the ADOT collector layer and manual instrumentation (see [Tracing Specification](observability.md#tracing-specification)) |
 | CI/CD | GitHub Actions with AWS OIDC |
 | Security checks | CodeQL, dependency review, Dependabot, `cdk-nag` |
-| Licence | Apache-2.0 or MIT; choose before the first public release |
+| Licence | MIT |
 
 ### Runtime Note
 

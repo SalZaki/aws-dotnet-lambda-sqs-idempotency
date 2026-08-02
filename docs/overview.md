@@ -19,49 +19,6 @@ The central correctness mechanism is a DynamoDB transaction that writes the orde
 idempotency record as one all-or-nothing operation. This avoids the failure window created by
 marking a message as processed before the order has actually been saved.
 
-## Why This Project Is Valuable
-
-This is a compact project, but it exercises a broad set of commercially useful skills.
-
-### AWS skills
-
-- Lambda event source mappings
-- SQS batching, visibility timeouts, retries, dead-letter queues, and redrive
-- DynamoDB conditional writes, transactions, TTL, on-demand capacity, and point-in-time recovery
-- CloudWatch Logs, Embedded Metric Format, dashboards, and alarms
-- OpenTelemetry and AWS Distro for OpenTelemetry
-- IAM least privilege
-- AWS CDK v2 in C#
-- Secure GitHub-to-AWS deployments with OpenID Connect
-- Cloud-based end-to-end testing
-
-### .NET skills
-
-- .NET 10 and modern C#
-- Dependency injection and composition roots
-- `System.Text.Json` source generation
-- Immutable message contracts
-- Validation and explicit error classification
-- Cancellation and timeout handling
-- AWS SDK for .NET v4
-- Unit, integration, architecture, and end-to-end testing
-- Central package management and reproducible builds
-- Structured logging and custom metrics
-- Native AOT benchmarking as an optional extension
-
-### Distributed systems skills
-
-- At-least-once delivery
-- Idempotency and duplicate detection
-- Atomicity and failure windows
-- Poison-message handling
-- Partial batch responses
-- Backpressure and concurrency control
-- Payload versioning
-- Correlation and causation
-- Operational observability
-- Transactional outbox as a future extension
-
 ## Project Goals
 
 1. Process order events from an SQS standard queue.

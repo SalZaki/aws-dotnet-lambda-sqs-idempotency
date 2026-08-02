@@ -105,3 +105,14 @@ Found by auditing the created GitHub issues against the spec's own deliverables.
 | 46 | Split the single 1716-line specification into twelve per-topic documents plus an index at `docs/README.md` | all | The repository layout already planned `architecture.md`, `correctness-model.md` and `testing-strategy.md` as separate files, and Story 8.3 was tasked with writing them. Leaving one large file guaranteed that story would copy sections into those names, recreating the duplication that change 32 removed. Splitting now makes the planned filenames the only home for that content. |
 | 47 | Converted every cross-reference from a bare section name into a markdown link | all | Named references survived renumbering but gave the reader nothing to click, and across files they would have been unusable. All internal links are checked for a resolving file and anchor. |
 | 48 | Renamed two headings that duplicated their file title | architecture, delivery | `High-Level Architecture` inside `architecture.md` became `System Diagram`, and `Delivery` inside `delivery.md` became `Backlog`. |
+
+## Front door and licence (v3)
+
+| # | Change | Documents | Rationale |
+| --- | --- | --- | --- |
+| 49 | Made the root `README.md` the project front door and reduced `docs/README.md` to an index of its own folder | README, docs index | The root file was a single heading, so the repository homepage was empty while the documentation index carried the project title, blurb and contents. Two READMEs is conventional. Having the front door empty is not. |
+| 50 | Moved the skills inventory out of `overview.md` into the root README | overview, README | It is portfolio positioning rather than specification. A visitor meets it on the homepage; a reader of the design documents does not need it. |
+| 51 | Replaced the README checklist in `delivery.md` with a pointer to the story that owns it | delivery | A checklist describing a deliverable, and the story implementing that deliverable, drift apart. Same failure that moved the epic and story listings out of this specification. The bullets are now acceptance criteria on the README story. |
+| 52 | Chose MIT and added `LICENSE` | infrastructure | The technology table had said "Apache-2.0 or MIT; choose before the first public release" since v1. The repository was already public with no licence file, so nobody could legally reuse it. |
+| 53 | Fixed a blockquote in the documentation index that swallowed the status line | docs index | The split removed the blank line after the blockquote, so markdown lazy continuation absorbed the following paragraph into the quote. |
+| 54 | Stated the scope boundary at the top of `security.md` | security | It covers design-time controls. Threats and attacker profiles belong in the threat model, which is not written yet. |

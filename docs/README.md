@@ -1,8 +1,9 @@
-# Reliable Serverless .NET 10 SQS Worker with Transactional Idempotency
+# Documentation
 
-> An open-source learning and portfolio project demonstrating reliable event processing with AWS
-Lambda, Amazon SQS, Amazon DynamoDB, AWS CDK, OpenTelemetry, and GitHub Actions.
-Specification version 3. Design complete, backlog created, implementation not started. Revision
+Design documentation for the reliable SQS worker. The project front door is the
+[repository README](../README.md).
+
+Specification version 3. Design complete, backlog created, implementation not started. Change
 history is in the [Revision Log](revision-log.md).
 
 ## Contents

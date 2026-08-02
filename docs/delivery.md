@@ -2,34 +2,10 @@
 
 ## Open-Source Project Requirements
 
-Before the first public release, add the following.
-
-- Clear project purpose in the first paragraph of the README
-- Architecture diagram
-- Correctness model explaining at-least-once, idempotency, and the two hash scopes
-- Prerequisites
-- Local test instructions
-- AWS bootstrap instructions
-- Deployment instructions
-- Sample event commands
-- Duplicate demonstration
-- Republish demonstration
-- DLQ demonstration
-- Teardown instructions
-- Estimated cost categories and cleanup warnings
-- Security model
-- Limitations
-- Roadmap
-- Contribution guide
-- Code of conduct
-- Security reporting policy
-- Support policy
-- Licence
-- Issue templates
-- Pull request template
-- Good-first-issue labels
-- Architecture decision records
-- Demo recording or animated terminal capture
+What the README, community files and demonstration assets must contain is tracked as acceptance
+criteria on the documentation stories in the backlog, not restated here. A checklist in a design
+document and the story that implements it drift apart, which is the same failure that moved the
+epic and story listings out of this specification.
 
 ### Repository Naming
 
