@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ReliableOrders.UnitTests</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ReliableOrders.Core\ReliableOrders.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    The samples are the fixtures the publisher and the end-to-end scenarios use as well. Copying them
+    rather than keeping a second copy here is what stops the suites drifting apart.
+  -->
+  <ItemGroup>
+    <None Include="..\..\samples\*.json"
+          Link="Samples\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>
