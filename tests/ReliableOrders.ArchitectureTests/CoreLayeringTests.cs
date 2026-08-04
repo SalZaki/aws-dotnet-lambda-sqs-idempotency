@@ -3,24 +3,22 @@ using System.Text.Json;
 namespace ReliableOrders.ArchitectureTests;
 
 /// <summary>
-/// Guards the one structural rule the rest of the design leans on: ReliableOrders.Core stays
-/// transport-neutral. Amazon.Lambda.SQSEvents is AWS-specific even though it is not the SDK, so the
-/// whole AWS package family is banned. See the Repository Structure section of docs/architecture.md.
+/// ReliableOrders.Core stays transport-neutral. Amazon.Lambda.SQSEvents is AWS-specific even though
+/// it is not the SDK, so the whole AWS package family is banned. See the Repository Structure
+/// section of docs/architecture.md.
 /// </summary>
 public sealed class CoreLayeringTests
 {
     /// <summary>
-    /// Covers every AWS-published family, not only the two named in the story. Amazon.Extensions.*
-    /// is the one most likely to be reached for by accident, because it carries the dependency
-    /// injection integration that looks like ordinary plumbing rather than an AWS dependency.
+    /// Covers every AWS-published family, not only AWSSDK and Amazon.Lambda. Amazon.Extensions.*
+    /// carries configuration and dependency injection helpers that read as ordinary plumbing.
     /// </summary>
     private static readonly string[] ForbiddenPrefixes = ["AWSSDK.", "AWSXRayRecorder", "AWS.", "Amazon."];
 
     /// <summary>
-    /// The lock file is the authority on what Core resolves. It records the full restore graph,
-    /// direct and transitive, and is unaffected by PrivateAssets — which is what makes it the right
-    /// source here. A package marked PrivateAssets="all" flows no assets to consumers and so never
-    /// appears in a consumer's output directory, yet Core still compiles against it.
+    /// The lock file records the full restore graph, direct and transitive, and is unaffected by
+    /// PrivateAssets. A package marked PrivateAssets="all" flows no assets to consumers, so it never
+    /// reaches a consumer's output directory, yet Core still compiles against it.
     /// </summary>
     [Fact]
     public void Core_declares_no_aws_package_in_its_restore_graph()
@@ -46,10 +44,9 @@ public sealed class CoreLayeringTests
     }
 
     /// <summary>
-    /// A second angle on the same rule. The lock file covers packages; this covers assemblies
-    /// arriving by any other route, such as a project reference from Core to an AWS-carrying
-    /// project. This assembly references Core alone, so every file beside it came from Core, from
-    /// the test framework, or from the runtime.
+    /// The lock file covers packages. This covers assemblies arriving by another route, such as a
+    /// project reference from Core to an AWS-carrying project. This assembly references Core alone,
+    /// so every file beside it came from Core, the test framework, or the runtime.
     /// </summary>
     [Fact]
     public void Core_brings_no_aws_assembly_into_its_output()

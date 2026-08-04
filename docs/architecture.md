@@ -108,12 +108,17 @@ Quality Tests section.
 ```csharp
 public interface IOrderEventParser
 {
-    ParseResult Parse(string messageBody);
+    ParseResult Parse(string? messageBody);
 }
 
 public abstract record ParseResult
 {
     private protected ParseResult() { }
+
+    public abstract TResult Match<TResult>(
+        Func<Parsed, TResult> whenParsed,
+        Func<Malformed, TResult> whenMalformed,
+        Func<UnsupportedSchemaVersion, TResult> whenUnsupportedSchemaVersion);
 
     public sealed record Parsed(OrderCreatedV1 Event) : ParseResult;
     public sealed record Malformed(string Reason) : ParseResult;
@@ -122,6 +127,8 @@ public abstract record ParseResult
 ```
 
 `Reason` must be a stable, body-free description suitable for logging.
+
+`messageBody` is nullable because the SQS record it comes from can carry a null body.
 
 ### `OrderEventValidator`
 
@@ -186,6 +193,12 @@ public abstract record OrderWriteResult
 {
     private protected OrderWriteResult() { }
 
+    public abstract TResult Match<TResult>(
+        Func<Created, TResult> whenCreated,
+        Func<Duplicate, TResult> whenDuplicate,
+        Func<Conflict, TResult> whenConflict,
+        Func<TransientFault, TResult> whenTransientFault);
+
     public sealed record Created : OrderWriteResult;
     public sealed record Duplicate(DuplicateScope Scope) : OrderWriteResult;
     public sealed record Conflict(ConflictScope Scope, string Reason) : OrderWriteResult;
@@ -196,8 +209,21 @@ public enum DuplicateScope { Event, Order }
 public enum ConflictScope { Event, Order, TokenMismatch }
 ```
 
-The `private protected` constructor closes the hierarchy so consumers can switch exhaustively
-without a defensive default arm.
+### Exhaustiveness
+
+Every result hierarchy in this design exposes a `Match` method.
+
+The `private protected` constructor stops anything outside the defining assembly adding a case. It
+does **not** make a `switch` exhaustive. C# has no closed hierarchies: a switch expression covering
+every case with no discard arm still fails to compile with CS8509, and warnings are errors here, so
+that is a build failure.
+
+`Match` provides the guarantee instead. Each case is a parameter, so adding one breaks every call
+site at compile time and no site can fall through to a default. Use it for classification results,
+where missing a case is a correctness bug.
+
+Specification v1 claimed the constructor alone let consumers "switch exhaustively without a defensive
+default arm". It does not, and following it would have put a default arm in every consumer.
 
 Note the absence of a `now` parameter. Specification v1 passed `DateTimeOffset now` into this
 method. The determinism rule requires every persisted value to derive from the event, so accepting a
@@ -389,6 +415,7 @@ aws-dotnet-lambda-sqs-idempotency/
 │       ├── idempotency-conflict.md
 │       └── processing-backlog.md
 ├── samples/
+│   ├── README.md                       what each fixture is for
 │   ├── valid-order-created-v1.json
 │   ├── duplicate-order-created-v1.json
 │   ├── republished-order-created-v1.json

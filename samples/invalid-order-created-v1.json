@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "eventId": "c47a9e02-8b16-4d3f-a5c8-2e9b7f1d4a63",
+  "eventType": "order.created",
+  "occurredAtUtc": "2026-08-01T14:22:41+01:00",
+  "source": "sample.order-publisher",
+  "correlationId": "00000000-0000-0000-0000-000000000000",
+  "causationId": null,
+  "data": {
+    "orderId": "",
+    "customerId": "CUS-90001",
+    "currency": "gbp",
+    "amountMinor": -1299,
+    "itemDescription": "Mechanical keyboard"
+  }
+}

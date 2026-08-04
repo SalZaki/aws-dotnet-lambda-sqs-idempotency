@@ -9,9 +9,9 @@ failing messages move to a dead-letter queue.
 
 ## Status
 
-**Design complete. Implementation started.** The specification is finished and reviewed, the backlog
-exists as GitHub issues, and the solution now restores, builds and tests from the repository root.
-The projects are still skeletons — no order is processed and nothing is deployable yet.
+**Design complete. Implementation started.** The specification is finished and reviewed, and the
+backlog exists as GitHub issues. The event contract and its parser are in place. Nothing is
+deployable yet: there is no persistence, no Lambda handler and no infrastructure.
 
 Progress is tracked through the
 [milestones](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/milestones), which run
