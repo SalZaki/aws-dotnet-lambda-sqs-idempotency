@@ -68,6 +68,12 @@ overflow. `CausationId` is nullable because a root event has no cause.
 - `amountMinor` is a positive integer in the currency's minor unit.
 - `itemDescription` is required and length-limited. Field limits must keep the worst-case DynamoDB
   item well under the 400 KB item-size ceiling.
+- No text field may carry leading or trailing whitespace. Padding is rejected rather than trimmed.
+  Every text field feeds a hash — `orderId` is the domain-level idempotency key and the rest of
+  `data` forms `BusinessSha256` — so a publisher that pads a value on one publish and not on its
+  retry creates a second order, or turns a benign republish into a conflict. Trimming would hide the
+  publisher's defect and change the hash input, which the same reasoning forbids for `occurredAtUtc`.
+  Interior whitespace is content and is preserved.
 - Unknown top-level fields are tolerated for forward compatibility.
 - Unknown schema versions must not be silently processed.
 
