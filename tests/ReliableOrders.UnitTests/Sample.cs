@@ -1,3 +1,5 @@
+using ReliableOrders.Core.Contracts;
+
 namespace ReliableOrders.UnitTests;
 
 /// <summary>
@@ -22,4 +24,15 @@ internal static class Sample
 
         return File.ReadAllText(path);
     }
+
+    /// <summary>
+    /// Reads a fixture and parses it, for tests that need the event rather than the body.
+    /// </summary>
+    /// <remarks>
+    /// Parsing rather than constructing the event by hand is deliberate for the hashing tests: what
+    /// they assert must hold for the object the parser actually produces from the bytes a publisher
+    /// sends, not for one a test assembled to suit itself.
+    /// </remarks>
+    internal static OrderCreatedV1 ParseEvent(string fileName) =>
+        Assert.IsType<ParseResult.Parsed>(new OrderEventParser().Parse(Read(fileName))).Event;
 }

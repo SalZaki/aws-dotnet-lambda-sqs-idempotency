@@ -107,11 +107,18 @@ Both hashes must be deterministic across machines, processes, and .NET versions.
 1. Map the deserialized event into an explicit canonical internal representation. Do not hash the
    deserialized contract types directly; a canonical type makes the hash input a deliberate,
    reviewable decision.
-2. Serialize with a dedicated source-generated `System.Text.Json` context that fixes property order,
-   uses invariant number and string formatting, writes `occurredAtUtc` in round-trip UTC form
-   (`"O"`), and does not emit indentation.
-3. Hash the UTF-8 bytes with SHA-256.
-4. Store the lowercase hexadecimal hash.
+2. Render identifiers as the 36-character hyphenated lowercase form, and `occurredAtUtc` in
+   round-trip form (`"O"`) **with its offset**, rather than converting to UTC first. Validation has
+   already rejected a non-zero offset, so every accepted value renders as `+00:00`. Converting would
+   make a rejected spelling hash the same as its UTC equivalent, which is the normalisation the
+   contract forbids for the reason that normalising changes the hash input.
+3. Serialize with a dedicated source-generated `System.Text.Json` context that fixes property order
+   and property names per property, uses invariant number formatting, and does not emit indentation.
+   The context cannot pin the string encoder, and the default encoder escapes the offset's plus
+   sign, so the hashed bytes carry `\u002B00:00`. That is stable and it is ASCII. Relaxing the
+   encoder to tidy it would rewrite every hash this repository has produced.
+4. Hash the UTF-8 bytes with SHA-256.
+5. Store the lowercase hexadecimal hash.
 
 `EnvelopeSha256` hashes the canonical envelope. `BusinessSha256` hashes the canonical `data` object
 alone. The `data` canonicalisation used for `BusinessSha256` must be the identical routine nested
@@ -130,6 +137,8 @@ instead.
   expected lowercase hexadecimal `EnvelopeSha256` and `BusinessSha256`.
 - Cover at least a minimal event, an event with a null `causationId`, an event carrying unknown
   top-level fields, and an event whose `data` matches another vector under a different `eventId`.
+- Cover a non-ASCII text field as well. String escaping is the one part of canonicalisation the
+  serializer options cannot state, so nothing but a vector would notice it changing.
 - Assert the computed hashes equal the committed constants.
 
 A vector test failing after an SDK or runtime upgrade is the intended signal. It means
