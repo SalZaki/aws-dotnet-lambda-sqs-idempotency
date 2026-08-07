@@ -18,10 +18,8 @@ internal static class CanonicalText
     /// Renders an identifier as the 36-character hyphenated form, lowercase.
     /// </summary>
     /// <remarks>
-    /// The 36 characters are what <see cref="IdempotencyClaim.MaxClientRequestTokenLength"/> allows,
-    /// exactly and with no headroom.
-    /// </remarks>
-    internal static string Identifier(Guid value) => value.ToString("D", CultureInfo.InvariantCulture);
+    internal static string Identifier(Guid value) =>
+        value.ToString("D", CultureInfo.InvariantCulture).ToLowerInvariant();
 
     /// <summary>
     /// Renders an instant in round-trip form, offset included.
