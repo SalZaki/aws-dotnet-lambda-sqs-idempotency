@@ -19,6 +19,15 @@
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--
+    The known-answer vectors are data the tests read at runtime rather than compile against, so they
+    have to reach the output directory. Kept in this project rather than in samples/ because nothing
+    else may use them: a fixture that another suite is free to edit is not a committed constant.
+  -->
+  <ItemGroup>
+    <None Update="Vectors\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

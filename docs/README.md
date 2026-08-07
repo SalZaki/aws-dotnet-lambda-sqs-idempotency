@@ -22,6 +22,7 @@ history is in the [Revision Log](revision-log.md).
 | [.NET Engineering Standards](engineering-standards.md) | Repository-wide build settings and the coding rules that protect the correctness model. |
 | [Delivery](delivery.md) | Open-source requirements, where the backlog lives, and the definition of done. |
 | [Revision Log](revision-log.md) | Every change from specification v1 onward, each with the defect it addresses. |
+| [Architecture Decision Records](adr/) | One record per decision that would otherwise be re-argued. [ADR 0005](adr/0005-separate-envelope-and-business-hashes.md) settles the idempotency keys, scopes and hashes. |
 
 ## Reading order
 

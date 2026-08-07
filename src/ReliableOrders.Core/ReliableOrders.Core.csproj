@@ -9,4 +9,15 @@
     </Description>
   </PropertyGroup>
 
+  <!--
+    The canonical types under Idempotency/ are internal: they are the hash input, not a contract
+    anyone outside this assembly should build against. They still need direct testing, because the
+    bytes they produce are what every stored idempotency record was compared on, and reaching them
+    only through a hash would leave a canonicalisation change visible as nothing more than a different
+    hexadecimal string.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="ReliableOrders.UnitTests" />
+  </ItemGroup>
+
 </Project>

@@ -1,0 +1,154 @@
+{
+  "about": [
+    "Known-answer vectors for CanonicalPayloadHasher, specified in the Known-answer vectors section",
+    "of docs/event-contract.md. Each entry pairs a wire event with the hashes this repository has",
+    "committed to producing for it.",
+    "",
+    "Comparing two hashes computed in the same process proves nothing about determinism: both move",
+    "together when the serializer, the runtime or the canonical model changes. These constants were",
+    "computed by an earlier build in a different process and do not move, which is what makes them a",
+    "cross-process and cross-version check rather than a self-consistency one.",
+    "",
+    "A vector failing after an SDK or runtime upgrade is the intended signal. It means canonicalisation",
+    "changed, and every idempotency record written before the upgrade now hashes differently, so",
+    "replays would be reclassified as conflicts. Treat it as a schema migration, never as a test to",
+    "update."
+  ],
+  "vectors": [
+    {
+      "name": "reference",
+      "why": "The reference event from docs/event-contract.md, with a null causationId as a root event has.",
+      "envelopeSha256": "f0693ae5653ae13fad1061820d3d393065bb16b67ce681e4ad3aeb726881d8c2",
+      "businessSha256": "4c98b65224bc90948e0482b79e40f30cb8c71e7fa1529058d9a3dd866da69f87",
+      "event": {
+        "schemaVersion": 1,
+        "eventId": "0d76e91c-44e6-4fba-901f-bfdb76645299",
+        "eventType": "order.created",
+        "occurredAtUtc": "2026-08-01T10:30:00Z",
+        "source": "sample.order-publisher",
+        "correlationId": "f1e02471-f9da-437f-bc32-e4e65394658a",
+        "causationId": null,
+        "data": {
+          "orderId": "ORD-100001",
+          "customerId": "CUS-90001",
+          "currency": "GBP",
+          "amountMinor": 1299,
+          "itemDescription": "Mechanical keyboard"
+        }
+      }
+    },
+    {
+      "name": "caused-event",
+      "why": "The reference event with a causationId present. Pins that the field is inside the envelope scope, so a root event and a caused one are not duplicates of each other.",
+      "envelopeSha256": "c5ca3b8e5d0c00209fdff399cb91906408c6911493aa37121a2c11aa951cdea1",
+      "businessSha256": "4c98b65224bc90948e0482b79e40f30cb8c71e7fa1529058d9a3dd866da69f87",
+      "event": {
+        "schemaVersion": 1,
+        "eventId": "0d76e91c-44e6-4fba-901f-bfdb76645299",
+        "eventType": "order.created",
+        "occurredAtUtc": "2026-08-01T10:30:00Z",
+        "source": "sample.order-publisher",
+        "correlationId": "f1e02471-f9da-437f-bc32-e4e65394658a",
+        "causationId": "6b1f0a53-2c4d-4a17-9f8e-3d2c5b7a91e4",
+        "data": {
+          "orderId": "ORD-100001",
+          "customerId": "CUS-90001",
+          "currency": "GBP",
+          "amountMinor": 1299,
+          "itemDescription": "Mechanical keyboard"
+        }
+      }
+    },
+    {
+      "name": "unknown-top-level-fields",
+      "why": "The reference event carrying fields this schema version does not know about, in a different property order. Its hashes are the reference vector's, which is the committed form of the forward-compatibility rule.",
+      "envelopeSha256": "f0693ae5653ae13fad1061820d3d393065bb16b67ce681e4ad3aeb726881d8c2",
+      "businessSha256": "4c98b65224bc90948e0482b79e40f30cb8c71e7fa1529058d9a3dd866da69f87",
+      "event": {
+        "tenantId": "acme",
+        "traceState": { "vendor": "example", "sampled": true },
+        "tags": ["priority", "gift"],
+        "data": {
+          "orderId": "ORD-100001",
+          "customerId": "CUS-90001",
+          "currency": "GBP",
+          "amountMinor": 1299,
+          "itemDescription": "Mechanical keyboard"
+        },
+        "causationId": null,
+        "correlationId": "f1e02471-f9da-437f-bc32-e4e65394658a",
+        "source": "sample.order-publisher",
+        "occurredAtUtc": "2026-08-01T10:30:00Z",
+        "eventType": "order.created",
+        "eventId": "0d76e91c-44e6-4fba-901f-bfdb76645299",
+        "schemaVersion": 1
+      }
+    },
+    {
+      "name": "same-data-new-event-id",
+      "why": "A legitimate republish of the reference order: new eventId, later occurredAtUtc, new correlationId, identical data. Shares the reference vector's business hash and differs in its envelope hash, which is the whole reason two hashes exist.",
+      "envelopeSha256": "4f7026adea1d89b3df04d1a7d1efeb42f85743bb742a6642830892c36daaff26",
+      "businessSha256": "4c98b65224bc90948e0482b79e40f30cb8c71e7fa1529058d9a3dd866da69f87",
+      "event": {
+        "schemaVersion": 1,
+        "eventId": "6b1f0a53-2c4d-4a17-9f8e-3d2c5b7a91e4",
+        "eventType": "order.created",
+        "occurredAtUtc": "2026-08-01T11:05:12Z",
+        "source": "sample.order-publisher",
+        "correlationId": "9c4d21b8-70a6-4f5e-8b3c-1e6f0d8a2b57",
+        "causationId": "0d76e91c-44e6-4fba-901f-bfdb76645299",
+        "data": {
+          "orderId": "ORD-100001",
+          "customerId": "CUS-90001",
+          "currency": "GBP",
+          "amountMinor": 1299,
+          "itemDescription": "Mechanical keyboard"
+        }
+      }
+    },
+    {
+      "name": "non-ascii-item-description",
+      "why": "Pins string escaping, which the serializer options cannot state. A change to how a non-ASCII character or a quotable one is written changes these bytes and nothing else would notice.",
+      "envelopeSha256": "3422df001ecbc3d4703e19c5eaf8fd90645ab9fd4f615bece374f874f78e49e6",
+      "businessSha256": "5461b901275c8efeb1a28ee289dbe9832e569542608a4efc8bee1af816fe09c1",
+      "event": {
+        "schemaVersion": 1,
+        "eventId": "a83b47d1-5e29-4c6b-8a01-7f4e2d9c3b16",
+        "eventType": "order.created",
+        "occurredAtUtc": "2026-08-01T12:40:05.1234567Z",
+        "source": "sample.order-publisher",
+        "correlationId": "5d8e3f19-6b2a-4c7d-9e01-8a3f5b2c6d47",
+        "causationId": null,
+        "data": {
+          "orderId": "ORD-100002",
+          "customerId": "CUS-90002",
+          "currency": "EUR",
+          "amountMinor": 4999,
+          "itemDescription": "Clavier « mécanique » — 日本語 & <emoji> 🎹"
+        }
+      }
+    },
+    {
+      "name": "extreme-amount",
+      "why": "The largest representable minor-unit amount, and single-character identifiers. Pins integer rendering at the boundary where a formatting change or a narrower numeric type would show.",
+      "envelopeSha256": "ee6a3a54b101b79e28af3ba5c23a0baa93db1c3bab52def6a393ef53e11720aa",
+      "businessSha256": "8aee41f247c4ff4e0375dc5bb83be6d3ac466fcdb8de4348b9205cf562100440",
+      "event": {
+        "schemaVersion": 1,
+        "eventId": "00000000-0000-4000-8000-000000000001",
+        "eventType": "order.created",
+        "occurredAtUtc": "1970-01-01T00:00:00Z",
+        "source": "s",
+        "correlationId": "ffffffff-ffff-4fff-bfff-ffffffffffff",
+        "causationId": null,
+        "data": {
+          "orderId": "O",
+          "customerId": "C",
+          "currency": "JPY",
+          "amountMinor": 9223372036854775807,
+          "itemDescription": "i"
+        }
+      }
+    }
+  ]
+}
