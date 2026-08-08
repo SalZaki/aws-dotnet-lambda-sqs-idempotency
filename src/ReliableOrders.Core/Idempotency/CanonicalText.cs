@@ -7,9 +7,11 @@ namespace ReliableOrders.Core.Idempotency;
 /// on them.
 /// </summary>
 /// <remarks>
-/// <see cref="Identifier"/> is used by the canonical envelope and by <see cref="IdempotencyClaim.Key"/>.
-/// The key the transaction writes and the identifier inside <c>EnvelopeSha256</c> have to be the same
-/// string rather than two spellings of one value, and two call sites each formatting for themselves is
+/// <see cref="Identifier"/> is used by the canonical envelope, by
+/// <see cref="Persistence.IdempotencyRecord.IdempotencyKey"/> and by the identifiers copied onto
+/// <see cref="Persistence.OrderRecord"/>. The key the transaction writes, the identifier inside
+/// <c>EnvelopeSha256</c> and the cross-reference between the two stored rows have to be the same
+/// string rather than four spellings of one value, and call sites each formatting for themselves is
 /// how that stops being true.
 /// </remarks>
 internal static class CanonicalText
@@ -19,8 +21,9 @@ internal static class CanonicalText
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The 36 characters are what <see cref="IdempotencyClaim.MaxClientRequestTokenLength"/> allows,
-    /// exactly and with no headroom.
+    /// The 36 characters are what
+    /// <see cref="Persistence.OrderWriteRequest.MaxClientRequestTokenLength"/> allows, exactly and
+    /// with no headroom.
     /// </para>
     /// <para>
     /// The lowercase digits come from the <c>"D"</c> specifier itself and are not re-lowered here.

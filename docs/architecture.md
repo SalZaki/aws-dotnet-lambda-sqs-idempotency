@@ -197,17 +197,30 @@ public abstract record OrderWriteResult
         Func<Created, TResult> whenCreated,
         Func<Duplicate, TResult> whenDuplicate,
         Func<Conflict, TResult> whenConflict,
-        Func<TransientFault, TResult> whenTransientFault);
+        Func<TransientFault, TResult> whenTransientFault,
+        Func<PermanentFault, TResult> whenPermanentFault);
 
     public sealed record Created : OrderWriteResult;
     public sealed record Duplicate(DuplicateScope Scope) : OrderWriteResult;
     public sealed record Conflict(ConflictScope Scope, string Reason) : OrderWriteResult;
     public sealed record TransientFault(string Reason) : OrderWriteResult;
+    public sealed record PermanentFault(string Reason) : OrderWriteResult;
 }
 
 public enum DuplicateScope { Event, Order }
 public enum ConflictScope { Event, Order, TokenMismatch }
 ```
+
+`PermanentFault` carries the `ValidationError` and `ItemCollectionSizeLimitExceeded` cancellation
+reasons that the [Error Classification](correctness-model.md#error-classification) table maps to a
+permanent failure. Earlier revisions of this section listed four cases, which left the store no way
+to express them — mapping them to `Conflict` would alarm as though a publisher had sent contradictory
+data, and mapping them to `TransientFault` would burn the message's receive attempts on a request
+that fails identically every time. Both are defects in this service rather than in any publisher.
+
+`Reason` on every case is a value from `WriteFailureReason`, not an SDK exception message. Those carry
+request identifiers, table names and item contents, which would make the reason useless as a metric
+dimension and put stored order data in the logs.
 
 ### Exhaustiveness
 
@@ -362,8 +375,9 @@ aws-dotnet-lambda-sqs-idempotency/
 │   ├── ReliableOrders.Core/
 │   │   ├── Contracts/
 │   │   ├── Validation/
-│   │   ├── Processing/
 │   │   ├── Idempotency/
+│   │   ├── Persistence/
+│   │   ├── Processing/
 │   │   └── Observability/
 │   ├── ReliableOrders.Aws/
 │   │   ├── DynamoDb/
