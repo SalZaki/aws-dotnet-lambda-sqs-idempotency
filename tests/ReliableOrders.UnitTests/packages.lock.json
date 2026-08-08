@@ -33,6 +33,11 @@
           "xunit.v3.mtp-v1": "[3.2.2]"
         }
       },
+      "AWSSDK.Core": {
+        "type": "Transitive",
+        "resolved": "4.0.100.9",
+        "contentHash": "OPYy41jZjXwxxcYRotaq24HDrwUnVtBB/mvg1IwB9D1ICXAtHqMa1sp2hpmlVJCZwjlcrPcTCJIejInvV1vp5g=="
+      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -163,8 +168,31 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
+      "reliableorders.aws": {
+        "type": "Project",
+        "dependencies": {
+          "AWSSDK.DynamoDBv2": "[4.0.102.1, )",
+          "Amazon.Lambda.SQSEvents": "[3.0.0, )",
+          "ReliableOrders.Core": "[1.0.0, )"
+        }
+      },
       "reliableorders.core": {
         "type": "Project"
+      },
+      "Amazon.Lambda.SQSEvents": {
+        "type": "CentralTransitive",
+        "requested": "[3.0.0, )",
+        "resolved": "3.0.0",
+        "contentHash": "FTWf7ODv7+hwnqHREYQWntNDJsu4WWtTcEZoji0e5QiChMMrMyfYf07E7flBanolf8dTY6jfVdDfC816uGkzdA=="
+      },
+      "AWSSDK.DynamoDBv2": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.102.1, )",
+        "resolved": "4.0.102.1",
+        "contentHash": "ZxvRoZcMbLeqGm9B4TsYHT6B6PsnIwve+kckPgb2IPuNzPEXzIRpUIlyGuSQg37NFPgkh6/3m4/QD5wkkHFdSg==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.100.9, 5.0.0)"
+        }
       }
     }
   }

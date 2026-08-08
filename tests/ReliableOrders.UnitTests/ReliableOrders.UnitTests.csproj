@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ReliableOrders.Core\ReliableOrders.Core.csproj" />
+    <ProjectReference Include="..\..\src\ReliableOrders.Aws\ReliableOrders.Aws.csproj" />
   </ItemGroup>
 
   <!--

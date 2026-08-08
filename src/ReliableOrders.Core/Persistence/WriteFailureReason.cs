@@ -47,6 +47,18 @@ public static class WriteFailureReason
     public const string TransactionConflict = "transient.transaction-conflict";
 
     /// <summary>
+    /// A transaction was cancelled and its reasons have not been classified yet.
+    /// </summary>
+    /// <remarks>
+    /// Interim, and Story 2.3 deletes it along with the branch that returns it. Until classification
+    /// exists the store cannot tell a duplicate from a conflict, and treating every cancellation as
+    /// transient is the safe direction to be wrong in — a benign redelivery is retried and eventually
+    /// dead-lettered, which is visible and recoverable, where the alternative would acknowledge a
+    /// message whose order was never stored.
+    /// </remarks>
+    public const string UnclassifiedCancellation = "transient.unclassified-cancellation";
+
+    /// <summary>
     /// The table rejected the request for capacity reasons.
     /// </summary>
     public const string Throttled = "transient.throttled";
@@ -64,6 +76,25 @@ public static class WriteFailureReason
     /// identical request and fails identically, which is why it is permanent and alarms.
     /// </remarks>
     public const string MalformedRequest = "permanent.malformed-request";
+
+    /// <summary>
+    /// A table the transaction writes to does not exist.
+    /// </summary>
+    /// <remarks>
+    /// A deployment defect — a wrong or missing table name — not a downstream fault. Every retry looks
+    /// for the same absent table, so retrying spends the message's receive attempts and dead-letters it
+    /// while the alarm blames DynamoDB for a typo in an environment variable.
+    /// </remarks>
+    public const string TableNotFound = "permanent.table-not-found";
+
+    /// <summary>
+    /// The execution role may not write to a table the transaction needs.
+    /// </summary>
+    /// <remarks>
+    /// Permanent for the same reason as <see cref="TableNotFound"/>. No retry grants a permission, and
+    /// reporting it as transient hides a least-privilege policy that is missing an action.
+    /// </remarks>
+    public const string AccessDenied = "permanent.access-denied";
 
     /// <summary>
     /// The write exceeded an item or collection size limit.
