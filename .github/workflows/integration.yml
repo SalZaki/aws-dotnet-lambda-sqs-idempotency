@@ -41,8 +41,11 @@ jobs:
       # Pulled explicitly so that an image-registry failure is reported as itself rather than as a
       # container that would not start. Testcontainers would otherwise pull it inside the fixture,
       # where the error surfaces as a test failure with a misleading cause.
+      # Pinned to an immutable digest, matching DynamoDbFixture.Image. A moving tag would let a
+      # future image push quietly change the emulator behaviour these tests certify, and the
+      # dangerous direction is a green build certifying a guarantee that no longer holds.
       - name: Pull dynamodb-local
-        run: docker pull amazon/dynamodb-local:latest
+        run: docker pull amazon/dynamodb-local:3.3.1@sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab
 
       # No AWS credentials are configured anywhere in this job. The tests must run against the
       # container on a clean machine, and an accidental dependency on a real account would show up

@@ -29,7 +29,25 @@ public sealed class DynamoDbFixture : IAsyncLifetime
     /// </summary>
     private const int DynamoDbPort = 8000;
 
-    private readonly IContainer _container = new ContainerBuilder("amazon/dynamodb-local:latest")
+    /// <summary>
+    /// The emulator image, pinned to an immutable digest.
+    /// </summary>
+    /// <remarks>
+    /// A moving tag would undo what these tests are for. They certify that the emulator reports
+    /// accurate cancellation reason codes and returns the conflicting item, which Stories 2.2 and 2.3
+    /// classify from and never re-read. A future push to <c>amazon/dynamodb-local</c> could change that
+    /// quietly, and the dangerous direction is not a red build — it is a green one certifying a
+    /// guarantee that no longer holds.
+    /// </remarks>
+    /// <remarks>
+    /// The tag is kept alongside the digest so a reader can see which version this is. Docker enforces
+    /// the digest; the tag is documentation. <c>integration.yml</c> pre-pulls the same reference, and
+    /// <c>ContainerImageTests</c> holds the two in step.
+    /// </remarks>
+    internal const string Image =
+        "amazon/dynamodb-local:3.3.1@sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab";
+
+    private readonly IContainer _container = new ContainerBuilder(Image)
         .WithPortBinding(DynamoDbPort, assignRandomHostPort: true)
         // In-memory rather than a mounted data file. Each run starts from nothing, so a test cannot
         // pass because of a row an earlier run left behind.
