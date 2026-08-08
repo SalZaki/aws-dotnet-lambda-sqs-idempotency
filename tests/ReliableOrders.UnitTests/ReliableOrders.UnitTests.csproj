@@ -8,6 +8,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ReliableOrders.Core\ReliableOrders.Core.csproj" />
     <ProjectReference Include="..\..\src\ReliableOrders.Aws\ReliableOrders.Aws.csproj" />
+    <!--
+      The console formatter is a hosting concern and lives in the function project, but what it writes
+      is the log contract the redaction cases assert on, so it is exercised here rather than left to
+      an integration suite that would need a deployed log group to observe the same bytes.
+    -->
+    <ProjectReference Include="..\..\src\ReliableOrders.Function\ReliableOrders.Function.csproj" />
   </ItemGroup>
 
   <!--

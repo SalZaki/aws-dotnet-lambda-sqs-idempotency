@@ -226,9 +226,16 @@ dotnet_diagnostic.IDE0005.severity = warning
 dotnet_diagnostic.IDE0051.severity = warning
 dotnet_diagnostic.IDE0052.severity = warning
 
-# CA1848 wants a LoggerMessage delegate for every log call. Story 5.1 decides the logging shape;
-# until then this would fire on every call site and say nothing useful.
-dotnet_diagnostic.CA1848.severity = none
+# CA1848 wants a LoggerMessage delegate for every log call, and Story 5.1 settled that it should get
+# one: every event this service emits is a source-generated LoggerMessage on ProcessingLog. Promoted
+# to warning so an ad-hoc logger.LogInformation added later fails the build rather than quietly
+# bypassing the one type that decides what may be logged.
+dotnet_diagnostic.CA1848.severity = warning
+
+# CA1716 objects to the namespace ReliableOrders.Function.* because Function is a keyword in Visual
+# Basic. The project name is fixed by the Repository Structure section of docs/architecture.md, and
+# the assembly is loaded by the Lambda runtime rather than referenced from another language.
+dotnet_diagnostic.CA1716.severity = none
 
 # Underscores in identifiers. Not enabled at latest-recommended, and switched on here so the
 # exemption for test names below is a real rule with a real exception rather than dead configuration.

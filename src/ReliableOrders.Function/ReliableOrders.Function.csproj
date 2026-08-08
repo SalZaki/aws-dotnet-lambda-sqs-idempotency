@@ -20,6 +20,12 @@
     <PackageReference Include="Amazon.Lambda.SQSEvents" />
     <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <!--
+      The console provider is a hosting decision and lives here rather than in Core, which takes
+      Microsoft.Extensions.Logging.Abstractions alone. Standard output is the whole log transport on
+      Lambda; see LoggingConfiguration.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
   </ItemGroup>
 
 </Project>
