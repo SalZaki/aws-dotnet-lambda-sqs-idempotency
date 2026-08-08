@@ -45,6 +45,55 @@
     transient.
 30. Persisted timestamps derive from `occurredAtUtc`, not from `TimeProvider`.
 
+### Coverage of the required cases
+
+Which test covers each case above, and what the outstanding ones are waiting on. Kept here rather
+than in an issue so the plan and its status cannot drift apart.
+
+| Case | Covered by |
+| --- | --- |
+| 1 | `OrderEventParserTests`, `SampleValidationTests` |
+| 2 | `OrderEventParserTests` |
+| 3 | `OrderEventParserTests`, `OrderContractSerializerContextTests` |
+| 4 | `OrderEventValidatorTests`, `ValidationResultTests` |
+| 5 | `OrderEventValidatorTests`, `CanonicalRepresentationTests` |
+| 6 | `OrderEventValidatorTests`, `EventSkewWindowTests` |
+| 7 | `HashVectorTests` against the committed vectors |
+| 8 | `UnknownFieldHashingTests`, and the `unknown-top-level-fields` vector |
+| 9 | `CanonicalPayloadHasherTests`, and the `same-data-new-event-id` vector |
+| 10 | `OrderTransactionFactoryTests` |
+| 11 | `DynamoDbOrderCommandStoreTests`, `OrderCommandStoreTests`. The `Processed` outcome itself belongs to the processor and follows with case 24 |
+| 12 | `TransactionCancellationClassifierTests`, `OrderClassificationTests` |
+| 13 | `TransactionCancellationClassifierTests`, `OrderClassificationTests` |
+| 14 | `TransactionCancellationClassifierTests`, `OrderClassificationTests` |
+| 15 | `TransactionCancellationClassifierTests`, `OrderClassificationTests` |
+| 16 | `DynamoDbOrderCommandStoreTests`, `DynamoDbHarnessTests` |
+| 17 | `TransactionCancellationClassifierTests`, over three unusable-item shapes |
+| 18 | `DynamoDbOrderCommandStoreTests` |
+| 19 | Waiting on `SqsBatchHandler` |
+| 20 | Waiting on `SqsBatchHandler` |
+| 21 | Waiting on `SqsBatchHandler` |
+| 22 | Waiting on `SqsBatchHandler` |
+| 23 | Waiting on the composition root's serializer context |
+| 24 | Waiting on `OrderMessageProcessor` |
+| 25 | Waiting on structured logging |
+| 26 | Waiting on structured logging |
+| 27 | Waiting on the metrics implementation |
+| 28 | Waiting on the metrics implementation |
+| 29 | `DynamoDbOrderCommandStoreTests`, both halves — the token is forwarded, and cancellation is neither reclassified nor swallowed when the SDK wraps it |
+| 30 | `OrderWriteRequestTests`, `OrderCommandStoreTests` |
+
+Cases 19 to 28 describe components that do not exist yet. They are listed as outstanding rather than
+quietly dropped, because a test plan that only records what has been done stops being a plan.
+
+### Coverage reporting
+
+The pull-request gate collects line and branch coverage on every run and publishes the Cobertura
+report as an artifact. No threshold is enforced. A number picked before the pipeline exists would
+either sit below what the suite already reaches, proving nothing, or block work unrelated to the code
+that moved it. Publishing the figure on every pull request is what lets a threshold be chosen from
+evidence once cases 19 to 28 are in.
+
 ## Concurrency Tests
 
 ### Required cases
