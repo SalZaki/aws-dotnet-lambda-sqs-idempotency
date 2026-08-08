@@ -1,0 +1,58 @@
+name: ci
+
+# A build gate, not the full pull-request pipeline. Story #33 owns that, and most of it cannot be
+# written yet: there are no integration tests, no CDK project to synth, and no coverage collection.
+# What is here is the part that would have caught main being merged in a state that does not compile,
+# which is why it exists ahead of its milestone.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Deliberately unfiltered by path. A gate that skips on some changes reports "not run" rather than
+# "passed", which is the wrong answer once these checks become required for merge.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      # Third-party actions are pinned to an immutable commit SHA rather than a
+      # tag, so a moved tag cannot change what runs. Update deliberately.
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # The SDK comes from global.json so that CI and a developer machine cannot
+      # resolve different versions of the compiler and analyzers.
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      # Locked mode fails when the resolved graph differs from the committed
+      # packages.lock.json, so CI restores the graph that was reviewed rather
+      # than whatever resolves today.
+      - name: Restore
+        run: dotnet restore ReliableOrders.slnx --locked-mode
+
+      # Before the build, so a formatting failure is reported as itself rather
+      # than buried under compiler output.
+      - name: Verify formatting
+        run: dotnet format ReliableOrders.slnx --verify-no-changes --no-restore
+
+      # Release, because TreatWarningsAsErrors and the analyzer set are what turn
+      # a malformed XML doc comment or an unused private field into a failure.
+      - name: Build
+        run: dotnet build ReliableOrders.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test ReliableOrders.slnx -c Release --no-build
