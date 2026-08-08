@@ -277,8 +277,22 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
+      "reliableorders.aws": {
+        "type": "Project",
+        "dependencies": {
+          "AWSSDK.DynamoDBv2": "[4.0.102.1, )",
+          "Amazon.Lambda.SQSEvents": "[3.0.0, )",
+          "ReliableOrders.Core": "[1.0.0, )"
+        }
+      },
       "reliableorders.core": {
         "type": "Project"
+      },
+      "Amazon.Lambda.SQSEvents": {
+        "type": "CentralTransitive",
+        "requested": "[3.0.0, )",
+        "resolved": "3.0.0",
+        "contentHash": "FTWf7ODv7+hwnqHREYQWntNDJsu4WWtTcEZoji0e5QiChMMrMyfYf07E7flBanolf8dTY6jfVdDfC816uGkzdA=="
       }
     }
   }
