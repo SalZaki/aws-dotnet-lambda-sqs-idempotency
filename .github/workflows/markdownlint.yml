@@ -3,16 +3,16 @@ name: markdownlint
 on:
   push:
     branches: [main]
-    paths:
-      - '**/*.md'
-      - '.markdownlint-cli2.jsonc'
-      - '.github/workflows/markdownlint.yml'
   pull_request:
-    paths:
-      - '**/*.md'
-      - '.markdownlint-cli2.jsonc'
-      - '.github/workflows/markdownlint.yml'
   workflow_dispatch:
+
+# Deliberately unfiltered by path. The default-branch ruleset requires the `lint` check, and a
+# filtered workflow does not report at all on a pull request that touches no markdown — GitHub reads
+# a check that never ran as outstanding rather than as passed, so such a pull request can never
+# merge. That is not hypothetical: it blocked the fix for a main that did not compile.
+#
+# A required check therefore has to run on every pull request. The linter itself is quick, and it has
+# nothing to do on a change that touches no markdown.
 
 permissions:
   contents: read
