@@ -45,17 +45,46 @@ public sealed class DynamoDbOrderCommandStoreTests
     }
 
     /// <summary>
-    /// Interim. Story 2.3 replaces this with classification, and this test is what will fail when it
-    /// does — deliberately, so the change is made rather than assumed.
+    /// A cancelled transaction is handed to the classifier and its verdict is returned unchanged.
     /// </summary>
+    /// <remarks>
+    /// The classifier has its own tests over every row of the table. What this covers is the wiring
+    /// between them, which nothing else in the gate does — the integration tests exercise it, but they
+    /// need Docker and are excluded from the merge gate, so deleting the catch block or passing the
+    /// wrong hashes would otherwise leave the fast checks green.
+    /// </remarks>
     [Fact]
-    public async Task A_cancelled_transaction_is_transient_until_classification_exists()
+    public async Task A_cancelled_transaction_is_classified_rather_than_reported_raw()
     {
-        var result = await Act(new TransactionCanceledException("cancelled"));
+        var orderEvent = ValidEvent.Create();
+        var hashes = Hasher.ComputeHashes(orderEvent);
 
-        var transient = Assert.IsType<OrderWriteResult.TransientFault>(result);
+        var cancellation = new TransactionCanceledException("cancelled")
+        {
+            CancellationReasons =
+            [
+                new CancellationReason
+                {
+                    Code = "ConditionalCheckFailed",
+                    Item = new Dictionary<string, AttributeValue>(StringComparer.Ordinal)
+                    {
+                        [IdempotencyTableSchema.EnvelopeSha256] = new() { S = hashes.EnvelopeSha256 },
+                    },
+                },
+                new CancellationReason { Code = "None" },
+            ],
+        };
 
-        Assert.Equal(WriteFailureReason.UnclassifiedCancellation, transient.Reason);
+        var store = new DynamoDbOrderCommandStore(
+            new StubDynamoDb(cancellation),
+            new DynamoDbTableNames("orders", "idempotency"),
+            IdempotencyRetention.Default);
+
+        var result = await store.TryCreateAsync(orderEvent, hashes, TestContext.Current.CancellationToken);
+
+        // The stored envelope is the one computed for this event, so the classifier must call it a
+        // duplicate. A store that reported the cancellation raw would fail here.
+        Assert.Equal(DuplicateScope.Event, Assert.IsType<OrderWriteResult.Duplicate>(result).Scope);
     }
 
     [Theory]

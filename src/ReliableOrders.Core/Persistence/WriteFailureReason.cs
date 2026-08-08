@@ -42,21 +42,20 @@ public static class WriteFailureReason
     public const string ConflictingItemMissing = "transient.conflicting-item-missing";
 
     /// <summary>
+    /// A cancelled transaction reported something other than one reason per item.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="ConflictingItemMissing"/> on purpose. That one means a row expired
+    /// between the condition and the response, which is ordinary; this means the response cannot be
+    /// interpreted at all, which is not. Sharing a reason would leave an operator unable to tell a TTL
+    /// race from an SDK contract that has changed underneath.
+    /// </remarks>
+    public const string UnreadableCancellation = "transient.unreadable-cancellation";
+
+    /// <summary>
     /// Another transaction touched one of the same items.
     /// </summary>
     public const string TransactionConflict = "transient.transaction-conflict";
-
-    /// <summary>
-    /// A transaction was cancelled and its reasons have not been classified yet.
-    /// </summary>
-    /// <remarks>
-    /// Interim, and Story 2.3 deletes it along with the branch that returns it. Until classification
-    /// exists the store cannot tell a duplicate from a conflict, and treating every cancellation as
-    /// transient is the safe direction to be wrong in — a benign redelivery is retried and eventually
-    /// dead-lettered, which is visible and recoverable, where the alternative would acknowledge a
-    /// message whose order was never stored.
-    /// </remarks>
-    public const string UnclassifiedCancellation = "transient.unclassified-cancellation";
 
     /// <summary>
     /// The table rejected the request for capacity reasons.

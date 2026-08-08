@@ -258,9 +258,9 @@ it easy to reintroduce the unsafe two-write sequence.
   Deterministic](correctness-model.md#transaction-requests-must-be-deterministic) section,
   writing no wall-clock values.
 - Classify `TransactionCanceledException` from `CancellationReasons` per the Duplicate and Conflict
-  Classification table, without a follow-up read. Not yet implemented — Story 2.3 owns it. Until then
-  the store reports every cancelled transaction as a transient fault, which retries a benign
-  redelivery rather than acknowledging a message whose order was never stored.
+  Classification table, without a follow-up read. Implemented by `TransactionCancellationClassifier`,
+  which takes no DynamoDB client, so the follow-up read cannot be reintroduced without widening its
+  signature.
 - Map `IdempotentParameterMismatchException` to `Conflict(ConflictScope.TokenMismatch, …)`.
 - Treat `ConditionalCheckFailed` with a null `Item` as `TransientFault`.
 - Preserve cancellation — never convert `OperationCanceledException` into a transient fault.

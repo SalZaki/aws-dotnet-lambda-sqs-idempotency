@@ -1,4 +1,5 @@
 using Amazon.DynamoDBv2;
+using Amazon.DynamoDBv2.Model;
 using Amazon.Runtime;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
@@ -81,6 +82,23 @@ public sealed class DynamoDbFixture : IAsyncLifetime
             });
 
         await DynamoDbTables.CreateAsync(Client, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Reads one row, or an empty dictionary when it is not there.
+    /// </summary>
+    public async Task<Dictionary<string, AttributeValue>> ReadItemAsync(
+        string tableName,
+        string partitionKey,
+        string value,
+        CancellationToken cancellationToken)
+    {
+        var response = await Client.GetItemAsync(
+            tableName,
+            new Dictionary<string, AttributeValue>(StringComparer.Ordinal) { [partitionKey] = new() { S = value } },
+            cancellationToken);
+
+        return response.Item;
     }
 
     /// <inheritdoc/>
