@@ -1,0 +1,53 @@
+name: integration
+
+# Container-backed tests, kept out of the pull-request build gate because they pull a large image and
+# start a container. Not a required check for merge — the gate in ci.yml is. That is a deliberate
+# trade: these tests are slow, not unimportant, and a failure here still has to be looked at.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      # Third-party actions are pinned to an immutable commit SHA rather than a
+      # tag, so a moved tag cannot change what runs. Update deliberately.
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore ReliableOrders.slnx --locked-mode
+
+      - name: Build
+        run: dotnet build ReliableOrders.slnx -c Release --no-restore
+
+      # Pulled explicitly so that an image-registry failure is reported as itself rather than as a
+      # container that would not start. Testcontainers would otherwise pull it inside the fixture,
+      # where the error surfaces as a test failure with a misleading cause.
+      - name: Pull dynamodb-local
+        run: docker pull amazon/dynamodb-local:latest
+
+      # No AWS credentials are configured anywhere in this job. The tests must run against the
+      # container on a clean machine, and an accidental dependency on a real account would show up
+      # here as a failure rather than as a surprise bill.
+      - name: Test
+        run: >
+          dotnet test tests/ReliableOrders.IntegrationTests/ReliableOrders.IntegrationTests.csproj
+          -c Release --no-build --filter "Category=Integration"

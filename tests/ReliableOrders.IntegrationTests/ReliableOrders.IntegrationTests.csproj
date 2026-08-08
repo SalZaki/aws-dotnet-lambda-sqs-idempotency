@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ReliableOrders.IntegrationTests</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ReliableOrders.Core\ReliableOrders.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    AWSSDK.DynamoDBv2 is a direct reference here, not a transitive one through an adapter project.
+    These tests exercise the real client against a real container, so they need the SDK whether or not
+    ReliableOrders.Aws happens to reference it today.
+  -->
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.DynamoDBv2" />
+    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>
