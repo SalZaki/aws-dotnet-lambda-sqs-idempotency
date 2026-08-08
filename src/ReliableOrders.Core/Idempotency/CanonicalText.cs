@@ -18,8 +18,21 @@ internal static class CanonicalText
     /// Renders an identifier as the 36-character hyphenated form, lowercase.
     /// </summary>
     /// <remarks>
-    internal static string Identifier(Guid value) =>
-        value.ToString("D", CultureInfo.InvariantCulture).ToLowerInvariant();
+    /// <para>
+    /// The 36 characters are what <see cref="IdempotencyClaim.MaxClientRequestTokenLength"/> allows,
+    /// exactly and with no headroom.
+    /// </para>
+    /// <para>
+    /// The lowercase digits come from the <c>"D"</c> specifier itself and are not re-lowered here.
+    /// The casing is part of the hash input, so it is pinned where every other canonicalisation
+    /// decision is pinned — by the committed vectors, which fail the build if it ever moves. Coercing
+    /// the case as well would hold the bytes steady through such a change, and that is a defensible
+    /// trade; it is declined so there is one formatting decision per value rather than two whose
+    /// interaction has to be reasoned about, and because a change of this kind should be seen rather
+    /// than absorbed.
+    /// </para>
+    /// </remarks>
+    internal static string Identifier(Guid value) => value.ToString("D", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// Renders an instant in round-trip form, offset included.
