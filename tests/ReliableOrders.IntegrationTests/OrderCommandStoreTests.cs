@@ -27,7 +27,7 @@ public sealed class OrderCommandStoreTests(DynamoDbFixture fixture)
     [Fact]
     public async Task A_new_order_writes_both_rows()
     {
-        var orderEvent = NewEvent();
+        var orderEvent = OrderEvents.New();
 
         var result = await Store().TryCreateAsync(
             orderEvent,
@@ -48,7 +48,7 @@ public sealed class OrderCommandStoreTests(DynamoDbFixture fixture)
     [Fact]
     public async Task Each_row_stores_the_hash_its_scope_is_classified_on()
     {
-        var orderEvent = NewEvent();
+        var orderEvent = OrderEvents.New();
         var hashes = Hasher.ComputeHashes(orderEvent);
 
         await Store().TryCreateAsync(orderEvent, hashes, TestContext.Current.CancellationToken);
@@ -69,7 +69,7 @@ public sealed class OrderCommandStoreTests(DynamoDbFixture fixture)
     [Fact]
     public async Task The_stored_expiry_derives_from_the_event_and_is_numeric()
     {
-        var orderEvent = NewEvent();
+        var orderEvent = OrderEvents.New();
 
         await Store().TryCreateAsync(
             orderEvent,
@@ -93,7 +93,7 @@ public sealed class OrderCommandStoreTests(DynamoDbFixture fixture)
     [Fact]
     public async Task The_stored_timestamps_are_the_event_time()
     {
-        var orderEvent = NewEvent();
+        var orderEvent = OrderEvents.New();
 
         await Store().TryCreateAsync(
             orderEvent,
@@ -123,7 +123,7 @@ public sealed class OrderCommandStoreTests(DynamoDbFixture fixture)
     [Fact]
     public async Task A_byte_identical_redelivery_does_not_fail()
     {
-        var orderEvent = NewEvent();
+        var orderEvent = OrderEvents.New();
         var hashes = Hasher.ComputeHashes(orderEvent);
         var store = Store();
 
@@ -139,44 +139,15 @@ public sealed class OrderCommandStoreTests(DynamoDbFixture fixture)
         new DynamoDbTableNames(DynamoDbTables.OrdersTableName, DynamoDbTables.IdempotencyTableName),
         IdempotencyRetention.Default);
 
-    /// <remarks>
-    /// A fresh event per test, so the shared container needs no cleanup and one test cannot pass
-    /// because of a row another wrote.
-    /// </remarks>
-    private static OrderCreatedV1 NewEvent()
-    {
-        var id = Guid.NewGuid();
-
-        return new OrderCreatedV1(
-            SchemaVersion: OrderContract.SupportedSchemaVersion,
-            EventId: id,
-            EventType: OrderContract.ExpectedEventType,
-            OccurredAtUtc: new DateTimeOffset(2026, 8, 1, 10, 30, 0, TimeSpan.Zero),
-            Source: "integration.tests",
-            CorrelationId: Guid.NewGuid(),
-            CausationId: null,
-            Data: new OrderData($"ORD-{id:N}", "CUS-90001", "GBP", 1299, "Mechanical keyboard"));
-    }
 
     private Task<Dictionary<string, AttributeValue>> ReadOrder(OrderCreatedV1 orderEvent) =>
-        Read(DynamoDbTables.OrdersTableName, OrderTableSchema.PartitionKey, orderEvent.Data.OrderId);
+        fixture.ReadItemAsync(DynamoDbTables.OrdersTableName, OrderTableSchema.PartitionKey, orderEvent.Data.OrderId, TestContext.Current.CancellationToken);
 
     private Task<Dictionary<string, AttributeValue>> ReadClaim(OrderCreatedV1 orderEvent) =>
-        Read(
+        fixture.ReadItemAsync(
             DynamoDbTables.IdempotencyTableName,
             IdempotencyTableSchema.PartitionKey,
-            orderEvent.EventId.ToString());
-
-    private async Task<Dictionary<string, AttributeValue>> Read(
-        string tableName,
-        string partitionKey,
-        string value)
-    {
-        var response = await fixture.Client.GetItemAsync(
-            tableName,
-            new Dictionary<string, AttributeValue>(StringComparer.Ordinal) { [partitionKey] = new() { S = value } },
+            orderEvent.EventId.ToString(),
             TestContext.Current.CancellationToken);
 
-        return response.Item;
-    }
 }

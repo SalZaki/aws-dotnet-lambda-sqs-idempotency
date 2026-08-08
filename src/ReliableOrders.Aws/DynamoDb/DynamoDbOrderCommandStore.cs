@@ -17,9 +17,8 @@ namespace ReliableOrders.Aws.DynamoDb;
 /// claim and skips the message.
 /// </para>
 /// <para>
-/// Cancellation reasons are not classified yet. Story 2.3 does that, and until it lands every
-/// cancelled transaction is reported as transient. See
-/// <see cref="WriteFailureReason.UnclassifiedCancellation"/> for why that is the safe direction.
+/// A cancelled transaction is classified by <see cref="TransactionCancellationClassifier"/> from the
+/// reasons the response already carries. Nothing is read back afterwards.
 /// </para>
 /// </remarks>
 public sealed class DynamoDbOrderCommandStore : IOrderCommandStore
@@ -75,10 +74,11 @@ public sealed class DynamoDbOrderCommandStore : IOrderCommandStore
             // its own branch rather than falling through to the one below.
             return new OrderWriteResult.Conflict(ConflictScope.TokenMismatch, WriteFailureReason.TokenMismatch);
         }
-        catch (TransactionCanceledException)
+        catch (TransactionCanceledException cancellation)
         {
-            // Story 2.3 replaces this with classification from CancellationReasons.
-            return new OrderWriteResult.TransientFault(WriteFailureReason.UnclassifiedCancellation);
+            // Classified from the reasons the response already carries. No follow-up read: it would
+            // cost a round trip on the commonest retry path and let the row change in between.
+            return TransactionCancellationClassifier.Classify(cancellation, hashes);
         }
         catch (ItemCollectionSizeLimitExceededException)
         {
