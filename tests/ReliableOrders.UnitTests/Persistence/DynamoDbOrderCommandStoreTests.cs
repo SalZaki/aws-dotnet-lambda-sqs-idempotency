@@ -20,6 +20,9 @@ public sealed class DynamoDbOrderCommandStoreTests
 {
     private static readonly CanonicalPayloadHasher Hasher = new();
 
+    /// <summary>
+    ///
+    /// </summary>
     [Fact]
     public async Task A_completed_transaction_is_created()
     {
@@ -87,6 +90,10 @@ public sealed class DynamoDbOrderCommandStoreTests
         Assert.Equal(DuplicateScope.Event, Assert.IsType<OrderWriteResult.Duplicate>(result).Scope);
     }
 
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="failure"></param>
     [Theory]
     [MemberData(nameof(TransientFailures))]
     public async Task A_service_failure_is_transient(string failure)
@@ -145,6 +152,31 @@ public sealed class DynamoDbOrderCommandStoreTests
     }
 
     /// <summary>
+    /// The caller's token reaches the SDK, rather than the call running to completion regardless.
+    /// </summary>
+    /// <remarks>
+    /// The other cancellation tests prove the store does not reclassify a cancellation once it happens.
+    /// Neither of them would notice a store that dropped the token on the floor, because a cancellation
+    /// would then never be raised at all — the invocation would keep working past its deadline instead.
+    /// </remarks>
+    [Fact]
+    public async Task The_cancellation_token_is_forwarded_to_the_sdk()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = new StubDynamoDb(null);
+        var orderEvent = ValidEvent.Create();
+
+        var store = new DynamoDbOrderCommandStore(
+            client,
+            new DynamoDbTableNames("orders", "idempotency"),
+            IdempotencyRetention.Default);
+
+        await store.TryCreateAsync(orderEvent, Hasher.ComputeHashes(orderEvent), cancellation.Token);
+
+        Assert.Equal(cancellation.Token, client.ObservedToken);
+    }
+
+    /// <summary>
     /// Cancellation is not a downstream fault. The invocation is ending, and reporting it as one would
     /// blame DynamoDB for this service's own deadline, so it propagates rather than being reclassified.
     /// </summary>
@@ -155,6 +187,9 @@ public sealed class DynamoDbOrderCommandStoreTests
             () => Act(new OperationCanceledException()));
     }
 
+    /// <summary>
+    ///
+    /// </summary>
     [Fact]
     public void A_null_dependency_throws()
     {
@@ -170,6 +205,10 @@ public sealed class DynamoDbOrderCommandStoreTests
             () => new DynamoDbOrderCommandStore(new StubDynamoDb(null), tables, null!));
     }
 
+    /// <summary>
+    ///
+    /// </summary>
+    /// <returns></returns>
     public static TheoryData<string> TransientFailures() =>
         ["throughput", "request-limit", "service", "unknown-code"];
 
@@ -224,11 +263,20 @@ public sealed class DynamoDbOrderCommandStoreTests
         new BasicAWSCredentials("stub", "stub"),
         new AmazonDynamoDBConfig { RegionEndpoint = RegionEndpoint.EUWest2 })
     {
+        /// <summary>
+        /// The token the store handed to the SDK, so a test can assert it was the caller's own.
+        /// </summary>
+        public CancellationToken ObservedToken { get; private set; }
+
         public override Task<TransactWriteItemsResponse> TransactWriteItemsAsync(
             TransactWriteItemsRequest request,
-            CancellationToken cancellationToken = default) =>
-            failure is null
+            CancellationToken cancellationToken = default)
+        {
+            ObservedToken = cancellationToken;
+
+            return failure is null
                 ? Task.FromResult(new TransactWriteItemsResponse())
                 : Task.FromException<TransactWriteItemsResponse>(failure);
+        }
     }
 }
