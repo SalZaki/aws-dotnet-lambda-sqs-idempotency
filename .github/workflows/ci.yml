@@ -54,5 +54,9 @@ jobs:
       - name: Build
         run: dotnet build ReliableOrders.slnx -c Release --no-restore
 
+      # Container-backed tests are excluded and run in integration.yml instead. They pull a large
+      # image and start a container, which is minutes against a gate that otherwise finishes in well
+      # under one. Expressed as an exclusion rather than an inclusion on purpose: a new test project
+      # nobody remembers to wire up still runs here, which is the safe direction to be wrong in.
       - name: Test
-        run: dotnet test ReliableOrders.slnx -c Release --no-build
+        run: dotnet test ReliableOrders.slnx -c Release --no-build --filter "Category!=Integration"
