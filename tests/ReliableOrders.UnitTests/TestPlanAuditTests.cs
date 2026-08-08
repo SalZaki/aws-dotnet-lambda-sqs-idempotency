@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace ReliableOrders.UnitTests;
 
 /// <summary>
-/// Holds the Coverage of the required cases table in docs/testing-strategy.md against the suite.
+/// Audits the coverage table in docs/testing-strategy.md against the tests that exist.
 /// </summary>
 /// <remarks>
 /// <para>

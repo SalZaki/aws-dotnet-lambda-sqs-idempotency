@@ -20,9 +20,6 @@ public sealed class DynamoDbOrderCommandStoreTests
 {
     private static readonly CanonicalPayloadHasher Hasher = new();
 
-    /// <summary>
-    ///
-    /// </summary>
     [Fact]
     public async Task A_completed_transaction_is_created()
     {
@@ -90,10 +87,6 @@ public sealed class DynamoDbOrderCommandStoreTests
         Assert.Equal(DuplicateScope.Event, Assert.IsType<OrderWriteResult.Duplicate>(result).Scope);
     }
 
-    /// <summary>
-    ///
-    /// </summary>
-    /// <param name="failure"></param>
     [Theory]
     [MemberData(nameof(TransientFailures))]
     public async Task A_service_failure_is_transient(string failure)
@@ -187,9 +180,6 @@ public sealed class DynamoDbOrderCommandStoreTests
             () => Act(new OperationCanceledException()));
     }
 
-    /// <summary>
-    ///
-    /// </summary>
     [Fact]
     public void A_null_dependency_throws()
     {
@@ -205,10 +195,6 @@ public sealed class DynamoDbOrderCommandStoreTests
             () => new DynamoDbOrderCommandStore(new StubDynamoDb(null), tables, null!));
     }
 
-    /// <summary>
-    ///
-    /// </summary>
-    /// <returns></returns>
     public static TheoryData<string> TransientFailures() =>
         ["throughput", "request-limit", "service", "unknown-code"];
 
