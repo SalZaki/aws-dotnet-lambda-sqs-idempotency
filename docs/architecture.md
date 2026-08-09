@@ -369,16 +369,16 @@ The composition root must do the following.
 [Unit Tests](testing-strategy.md#unit-tests) asserts on the serialised bytes.
 
 Specification v1 and v2 justified this by saying an unregistered response type serialises to `{}`,
-which Lambda would read as an empty `batchItemFailures` array and use to delete every failed record
-silently. That is not what happens on `Amazon.Lambda.Serialization.SystemTextJson` 3.0.0. Removing
-the registration and serialising a response throws `JsonSerializerException`, naming the type — loud,
-and it fails the invocation, so the batch is retried rather than lost.
+which Lambda would read as an empty `batchItemFailures` array and use to delete every failed
+record silently. That is not what happens on `Amazon.Lambda.Serialization.SystemTextJson` 3.0.0.
+Removing the registration and serialising a response throws `JsonSerializerException`, naming the
+type — loud, and it fails the invocation, so the batch is retried rather than lost.
 
-The requirement stands and the test still reads bytes; what changed is the severity and the reason. A
-missing registration is a deployment that fails on its first message, not silent data loss. The bytes
-still matter because a shape change — a renamed property, a different naming policy — writes valid
-JSON that Lambda cannot match to any record, and a test asserting on the returned object would see
-nothing wrong.
+The requirement stands and the test still reads bytes; what changed is the severity and the
+reason. A missing registration is a deployment that fails on its first message, not silent data
+loss. The bytes still matter because a shape change — a renamed property, a different naming
+policy — writes valid JSON that Lambda cannot match to any record, and a test asserting on the
+returned object would see nothing wrong.
 
 ## Repository Structure
 
