@@ -62,7 +62,7 @@ than in an issue so the plan and its status cannot drift apart.
 | 8 | `UnknownFieldHashingTests`, and the `unknown-top-level-fields` vector |
 | 9 | `CanonicalPayloadHasherTests`, and the `same-data-new-event-id` vector |
 | 10 | `OrderTransactionFactoryTests` |
-| 11 | `DynamoDbOrderCommandStoreTests`, `OrderCommandStoreTests`. The `Processed` outcome itself belongs to the processor and follows with case 24 |
+| 11 | `DynamoDbOrderCommandStoreTests`, `OrderCommandStoreTests`, and `OrderMessageProcessorTests` for the `Processed` outcome the store cannot report on its own |
 | 12 | `TransactionCancellationClassifierTests`, `OrderClassificationTests` |
 | 13 | `TransactionCancellationClassifierTests`, `OrderClassificationTests` |
 | 14 | `TransactionCancellationClassifierTests`, `OrderClassificationTests` |
@@ -75,12 +75,12 @@ than in an issue so the plan and its status cannot drift apart.
 | 21 | Waiting on `SqsBatchHandler` |
 | 22 | Waiting on `SqsBatchHandler` |
 | 23 | Waiting on the composition root's serializer context |
-| 24 | Waiting on `OrderMessageProcessor` |
+| 24 | Waiting on `SqsBatchHandler`. The processor exists, but the deadline is the handler's to watch — it owns the invocation and its remaining time |
 | 25 | `LogRedactionTests`, over every event and over the shape of the log's public surface |
 | 26 | `LogRedactionTests`, which also pins the complete field set of a conflict line |
 | 27 | `EmbeddedMetricsPublisherTests`, over the dimension set and over the whole published record |
 | 28 | `EmbeddedMetricsPublisherTests`, across five deliveries and over the shape of `IInvocationMetrics` |
-| 29 | `DynamoDbOrderCommandStoreTests`, both halves — the token is forwarded, and cancellation is neither reclassified nor swallowed when the SDK wraps it |
+| 29 | `DynamoDbOrderCommandStoreTests`, both halves — the token is forwarded, and cancellation is neither reclassified nor swallowed when the SDK wraps it. `OrderMessageProcessorTests` covers the same forwarding one layer up |
 | 30 | `OrderWriteRequestTests`, `OrderCommandStoreTests` |
 
 Cases 19 to 28 describe components that do not exist yet. They are listed as outstanding rather than

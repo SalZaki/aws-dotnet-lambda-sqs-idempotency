@@ -275,14 +275,9 @@ public interface IOrderMessageProcessor
 {
     Task<MessageProcessingResult> ProcessAsync(
         IncomingMessage message,
-        ProcessingContext context,
+        IInvocationMetrics metrics,
         CancellationToken cancellationToken);
 }
-
-public sealed record ProcessingContext(
-    string LambdaRequestId,
-    string Service,
-    string Environment);
 
 public sealed record MessageProcessingResult(
     string MessageId,
@@ -306,7 +301,16 @@ public enum MessageProcessingOutcome
 
 `DeadlineDeferred` is distinct from `TransientFailure` because the metrics specification counts them
 separately and their operational meanings differ. One is a downstream fault, the other is
-self-inflicted back-pressure.
+self-inflicted back-pressure. It is defined here and produced by
+[`SqsBatchHandler`](#sqsbatchhandler), which is the only thing that knows the invocation's remaining
+time; giving the processor a deadline would put a second clock on the path whose whole purpose is to
+be reproducible.
+
+There is no `ProcessingContext`. Specification v2 gave this method one carrying the Lambda request
+identifier, the service name and the environment, and none of the three survived: the service and
+environment belong to `ProcessingLog`, which owns them for the process, and the request identifier
+sits on the invocation scope the batch handler opens. The invocation's `IInvocationMetrics` is what
+the processor actually needs, and it is a collaborator rather than context.
 
 #### Responsibilities
 
