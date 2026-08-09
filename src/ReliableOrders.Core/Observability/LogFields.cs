@@ -140,7 +140,14 @@ public static class LogFields
     public const string FailureCount = "FailureCount";
 
     /// <summary>
-    /// Milliseconds of invocation time left when a record was deferred.
+    /// Milliseconds past the processing deadline when a record was deferred.
     /// </summary>
-    public const string RemainingMs = "RemainingMs";
+    /// <remarks>
+    /// An overrun rather than a remainder. A record is deferred only once the deadline has already
+    /// passed, so time left is zero or negative by construction and reporting it as "remaining" would
+    /// describe every deferral as having had less than no time. The value is small for the first
+    /// record deferred and grows across the rest of the batch, which says how long the batch spent
+    /// past its deadline rather than how close it came to finishing.
+    /// </remarks>
+    public const string OverrunMs = "OverrunMs";
 }
