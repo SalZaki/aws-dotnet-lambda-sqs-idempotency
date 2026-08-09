@@ -291,9 +291,9 @@ public sealed partial class ProcessingLog
     /// when the handler is under the most pressure. <c>RemainingMs</c> is what this event is read for.
     /// The metrics side excludes deferrals from latency for the same reason.
     /// </remarks>
-    /// <param name="remaining">Invocation time left when the record was deferred.</param>
-    public void ProcessingDeadlineReached(TimeSpan remaining) =>
-        LogProcessingDeadlineReached(Milliseconds(remaining), DeadlineDeferredOutcome);
+    /// <param name="overrun">How far past the processing deadline the batch had run.</param>
+    public void ProcessingDeadlineReached(TimeSpan overrun) =>
+        LogProcessingDeadlineReached(Milliseconds(overrun), DeadlineDeferredOutcome);
 
     // The generated overloads. Prefixed rather than overloaded so a call site reads as one or the
     // other, and named through nameof so a rename of the public method carries the log event's name
@@ -370,8 +370,8 @@ public sealed partial class ProcessingLog
         EventId = LogEvents.ProcessingDeadlineReached,
         EventName = nameof(ProcessingDeadlineReached),
         Level = LogLevel.Warning,
-        Message = "Processing deadline reached with {RemainingMs}ms remaining, outcome {Outcome}")]
-    private partial void LogProcessingDeadlineReached(long remainingMs, string outcome);
+        Message = "Processing deadline reached {OverrunMs}ms past the deadline, outcome {Outcome}")]
+    private partial void LogProcessingDeadlineReached(long overrunMs, string outcome);
 
     /// <summary>
     /// The level of the one event whose log call is guarded.

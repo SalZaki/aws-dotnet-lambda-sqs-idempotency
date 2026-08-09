@@ -2,17 +2,18 @@ using System.Globalization;
 using Amazon.Lambda.SQSEvents;
 using ReliableOrders.Core.Processing;
 
-namespace ReliableOrders.Function.Sqs;
+namespace ReliableOrders.Aws.Sqs;
 
 /// <summary>
 /// Turns an SQS record into the shape this service processes.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The one place that knows a message came from SQS. Keeping it here rather than in
-/// <c>ReliableOrders.Core</c> is what the layering rule is for: Core defines
-/// <see cref="IncomingMessage"/> so that <c>Amazon.Lambda.SQSEvents</c> never reaches it, and an
-/// architecture test fails the build if it ever does.
+/// The one place that knows a message came from SQS. Keeping it out of <c>ReliableOrders.Core</c> is
+/// what the layering rule is for: Core defines <see cref="IncomingMessage"/> so that
+/// <c>Amazon.Lambda.SQSEvents</c> never reaches it, and an architecture test fails the build if it
+/// ever does. It sits beside <see cref="SqsBatchHandler"/> because mapping is the first thing that
+/// handler does with a record, and a step of the handler is not a composition-root concern.
 /// </para>
 /// <para>
 /// Every value it reads is one SQS may omit. The body and the receive count have a stated fallback;

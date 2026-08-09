@@ -70,12 +70,12 @@ than in an issue so the plan and its status cannot drift apart.
 | 16 | `DynamoDbOrderCommandStoreTests`, `DynamoDbHarnessTests` |
 | 17 | `TransactionCancellationClassifierTests`, over three unusable-item shapes |
 | 18 | `DynamoDbOrderCommandStoreTests` |
-| 19 | Waiting on `SqsBatchHandler` |
-| 20 | Waiting on `SqsBatchHandler` |
-| 21 | Waiting on `SqsBatchHandler` |
-| 22 | Waiting on `SqsBatchHandler` |
+| 19 | `SqsBatchHandlerTests` |
+| 20 | `SqsBatchHandlerTests`, from both sides — a mixed batch and a clean one |
+| 21 | `SqsBatchHandlerTests`, over a batch whose records all carry the same event identifier |
+| 22 | `BatchItemFailuresTests`, over null, empty, whitespace and duplicate identifiers |
 | 23 | Waiting on the composition root's serializer context |
-| 24 | Waiting on `SqsBatchHandler`. The processor exists, but the deadline is the handler's to watch — it owns the invocation and its remaining time |
+| 24 | `SqsBatchHandlerTests`, asserting the deferred records never reach the processor |
 | 25 | `LogRedactionTests`, over every event and over the shape of the log's public surface |
 | 26 | `LogRedactionTests`, which also pins the complete field set of a conflict line |
 | 27 | `EmbeddedMetricsPublisherTests`, over the dimension set and over the whole published record |

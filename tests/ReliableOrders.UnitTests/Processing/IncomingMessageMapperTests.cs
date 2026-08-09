@@ -1,5 +1,5 @@
 using Amazon.Lambda.SQSEvents;
-using ReliableOrders.Function.Sqs;
+using ReliableOrders.Aws.Sqs;
 
 namespace ReliableOrders.UnitTests.Processing;
 

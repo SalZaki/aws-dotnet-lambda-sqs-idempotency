@@ -150,11 +150,11 @@ public sealed class ProcessingLogTests
     /// from this field at exactly the moment the handler is under the most pressure.
     /// </remarks>
     [Fact]
-    public void A_deadline_deferral_reports_remaining_time_and_no_duration()
+    public void A_deadline_deferral_reports_its_overrun_and_no_duration()
     {
         var line = Emit(log => log.ProcessingDeadlineReached(TimeSpan.FromMilliseconds(250)));
 
-        Assert.Equal(250, Number(line, LogFields.RemainingMs));
+        Assert.Equal(250, Number(line, LogFields.OverrunMs));
         Assert.False(line.TryGetProperty(LogFields.DurationMs, out _));
     }
 
