@@ -24,7 +24,9 @@ one terminal event, so a query grouping by `Outcome` still sees each record once
 
 `ProcessingDeadlineReached` is the one terminal event without `DurationMs`. No work was done, so
 there is no duration, and a zero would drag down any latency derived from that field at the moment
-the handler is under most pressure. It carries `RemainingMs` instead. The metrics side excludes
+the handler is under most pressure. It carries `OverrunMs` instead — how far past the deadline the
+batch had run, which is what the value can only ever be, since a record is deferred once the deadline
+has already passed. The metrics side excludes
 deferrals from `RecordProcessingLatency` for the same reason.
 
 Lines are written synchronously, on the thread that logged them. A background writer is the right

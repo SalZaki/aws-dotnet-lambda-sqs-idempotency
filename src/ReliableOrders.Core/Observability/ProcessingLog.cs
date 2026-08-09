@@ -288,7 +288,7 @@ public sealed partial class ProcessingLog
     /// <remarks>
     /// The one terminal event with no <c>DurationMs</c>. No work was done, so there is no duration to
     /// report, and writing a zero would drag the latency a query derives from this field down exactly
-    /// when the handler is under the most pressure. <c>RemainingMs</c> is what this event is read for.
+    /// when the handler is under the most pressure. <c>OverrunMs</c> is what this event is read for.
     /// The metrics side excludes deferrals from latency for the same reason.
     /// </remarks>
     /// <param name="overrun">How far past the processing deadline the batch had run.</param>
