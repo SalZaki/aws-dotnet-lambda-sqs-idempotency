@@ -123,32 +123,40 @@ public sealed partial class ProcessingLog
     /// Adds the identifiers that exist only once a body has parsed.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Opened inside the record scope, immediately after parsing, so everything from validation
-    /// onwards is queryable by order. The correlation identifier is optional in the contract, and an
-    /// absent one is omitted rather than written as an empty string, so a query for lines lacking
-    /// correlation finds the records that truly had none.
+    /// onwards is queryable by order.
+    /// </para>
+    /// <para>
+    /// Every parameter is optional, and an absent one is omitted rather than written as an empty
+    /// string or a zeroed identifier. That is what lets a query for lines lacking correlation find
+    /// the records that truly had none — and it is why none of these is guarded. This runs after
+    /// parsing but before validation, where a missing field is a publisher's mistake rather than a
+    /// caller's defect: rejecting one here would turn an invalid event into an unhandled exception
+    /// and lose the validation failure that explains it.
+    /// </para>
     /// </remarks>
     /// <param name="eventId">The domain event identifier, not a <see cref="LogEvents"/> number.</param>
-    /// <param name="orderId">The order identifier.</param>
+    /// <param name="orderId">The order identifier, when the event carried one.</param>
     /// <param name="correlationId">The publisher's correlation identifier, when it sent one.</param>
     /// <returns>The scope, which the caller disposes with the record.</returns>
-    public IDisposable BeginOrderIdentity(string eventId, string orderId, string? correlationId)
+    public IDisposable BeginOrderIdentity(string? eventId, string? orderId, string? correlationId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(eventId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(orderId);
+        var state = new Dictionary<string, object>(StringComparer.Ordinal);
 
-        var state = new Dictionary<string, object>(StringComparer.Ordinal)
-        {
-            [LogFields.EventId] = eventId,
-            [LogFields.OrderId] = orderId,
-        };
-
-        if (!string.IsNullOrWhiteSpace(correlationId))
-        {
-            state[LogFields.CorrelationId] = correlationId;
-        }
+        Add(state, LogFields.EventId, eventId);
+        Add(state, LogFields.OrderId, orderId);
+        Add(state, LogFields.CorrelationId, correlationId);
 
         return _logger.BeginScope(state) ?? NullScope.Instance;
+
+        static void Add(Dictionary<string, object> target, string field, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                target[field] = value;
+            }
+        }
     }
 
     /// <summary>

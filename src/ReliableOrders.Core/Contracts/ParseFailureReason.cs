@@ -40,4 +40,18 @@ public static class ParseFailureReason
     /// A field held a value of the wrong JSON type.
     /// </summary>
     public const string FieldTypeMismatch = "json.field-type-mismatch";
+
+    /// <summary>
+    /// The body declared a schema version this build does not process.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="SchemaVersionUnreadable"/>, which means the field could not be read
+    /// at all. This one is readable and simply newer or older than anything here handles, and the
+    /// response is to deploy a build that knows it rather than to fix the publisher.
+    /// The version itself is deliberately not part of the value: a reason is what a metric groups by
+    /// and an alarm matches, and folding a number into it would give every unsupported version its
+    /// own series. <c>ParseResult.UnsupportedSchemaVersion</c> carries the number for a caller that
+    /// needs it.
+    /// </remarks>
+    public const string UnsupportedSchemaVersion = "schema-version.unsupported";
 }
