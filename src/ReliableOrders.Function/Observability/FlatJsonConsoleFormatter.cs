@@ -41,7 +41,7 @@ public sealed class FlatJsonConsoleFormatter : ConsoleFormatter
     /// </summary>
     public const string FormatterName = "reliable-orders-json";
 
-    private readonly ConsoleFormatterOptions options;
+    private readonly ConsoleFormatterOptions _options;
 
     /// <summary>
     /// Creates the formatter.
@@ -57,7 +57,7 @@ public sealed class FlatJsonConsoleFormatter : ConsoleFormatter
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        this.options = options;
+        _options = options;
     }
 
     /// <inheritdoc/>
@@ -77,7 +77,7 @@ public sealed class FlatJsonConsoleFormatter : ConsoleFormatter
 
         var fields = new Dictionary<string, object?>(StringComparer.Ordinal);
 
-        if (this.options.IncludeScopes)
+        if (_options.IncludeScopes)
         {
             CollectScopes(scopeProvider, fields);
         }
@@ -90,31 +90,75 @@ public sealed class FlatJsonConsoleFormatter : ConsoleFormatter
         {
             writer.WriteStartObject();
 
-            this.WriteTimestamp(writer);
+            if (WriteTimestamp(writer))
+            {
+                Reserve(TimestampField);
+            }
+
             writer.WriteString(LogLevelField, Describe(logEntry.LogLevel));
+            Reserve(LogLevelField);
+
             writer.WriteNumber(LogEventIdField, logEntry.EventId.Id);
+            Reserve(LogEventIdField);
 
             if (logEntry.EventId.Name is { Length: > 0 } eventName)
             {
                 writer.WriteString(LogEventField, eventName);
+                Reserve(LogEventField);
             }
 
             writer.WriteString(CategoryField, logEntry.Category);
+            Reserve(CategoryField);
 
             if (message is not null)
             {
                 writer.WriteString(MessageField, message);
+                Reserve(MessageField);
             }
 
-            WriteException(writer, logEntry.Exception);
+            // The type and the stack trace, never the message. "Full exception payloads containing
+            // message bodies" are on the Do Not Log list, and an SDK exception message is where a
+            // request body or an item's contents would arrive. The type and the throwing frame
+            // identify the defect; a cause an operator is meant to read belongs in a fixed-vocabulary
+            // Reason field, which is what ProcessingLog writes. A failure that must be human-readable,
+            // such as missing cold-start configuration, should therefore be thrown rather than logged
+            // — the runtime prints it.
+            if (logEntry.Exception is { } exception)
+            {
+                writer.WriteString(ExceptionTypeField, exception.GetType().FullName);
+                Reserve(ExceptionTypeField);
+
+                if (exception.StackTrace is { Length: > 0 } stackTrace)
+                {
+                    writer.WriteString(ExceptionStackTraceField, stackTrace);
+                    Reserve(ExceptionStackTraceField);
+                }
+            }
 
             foreach (var field in fields)
             {
-                WriteField(writer, QualifyIfReserved(field.Key), field.Value);
+                WriteField(writer, field.Key, field.Value);
             }
 
             writer.WriteEndObject();
             writer.Flush();
+        }
+
+        // Moves a field aside when this record has already written a property of that name.
+        //
+        // Utf8JsonWriter does not reject a duplicate key even with validation on, and a reader's
+        // choice between the two is undefined, so one value would be silently unreachable. Renaming
+        // rather than dropping keeps it: a line that loses a field an operator went looking for is the
+        // same problem in a quieter form. Driven by what was actually written rather than by a fixed
+        // list, because half these names are conditional — a record with no timestamp configured
+        // leaves Timestamp free, and moving a field out of it would put the value at a path no query
+        // written against the production shape will match.
+        void Reserve(string name)
+        {
+            if (fields.Remove(name, out var displaced))
+            {
+                fields[ReservedFieldPrefix + name] = displaced;
+            }
         }
 
         textWriter.WriteLine(Encoding.UTF8.GetString(buffer.WrittenSpan));
@@ -173,32 +217,12 @@ public sealed class FlatJsonConsoleFormatter : ConsoleFormatter
             fields);
 
     /// <remarks>
-    /// The type and the stack trace, never the message. "Full exception payloads containing message
-    /// bodies" are on the Do Not Log list, and an SDK exception message is where a request body or an
-    /// item's contents would arrive. The type and the throwing frame identify the defect; a cause an
-    /// operator is meant to read belongs in a fixed-vocabulary <c>Reason</c> field, which is what
-    /// <c>ProcessingLog</c> writes. A failure that must be human-readable, such as missing cold-start
-    /// configuration, should therefore be thrown rather than logged — the runtime prints it.
-    /// </remarks>
-    private static void WriteException(Utf8JsonWriter writer, Exception? exception)
-    {
-        if (exception is null)
-        {
-            return;
-        }
-
-        writer.WriteString(ExceptionTypeField, exception.GetType().FullName);
-
-        if (exception.StackTrace is { Length: > 0 } stackTrace)
-        {
-            writer.WriteString(ExceptionStackTraceField, stackTrace);
-        }
-    }
-
-    /// <remarks>
-    /// Numbers and booleans keep their JSON type so Logs Insights can compare and sum them without a
-    /// cast. Anything else is written as a string through the invariant culture, which matters because
-    /// the process runs with invariant globalization and a field must not change shape with a locale.
+    /// Every numeric type keeps its JSON type so Logs Insights can compare and sum it without a cast.
+    /// Missing one is not a compile error and not a run-time error either — it arrives as a quoted
+    /// string, and a query that averages it returns no rows rather than failing, which is the silent
+    /// empty result this formatter exists to avoid. Anything genuinely non-numeric is written as a
+    /// string through the invariant culture, which matters because the process runs with invariant
+    /// globalization and a field must not change shape with a locale.
     /// </remarks>
     private static void WriteField(Utf8JsonWriter writer, string name, object? value)
     {
@@ -227,6 +251,20 @@ public sealed class FlatJsonConsoleFormatter : ConsoleFormatter
             case double number when double.IsFinite(number):
                 writer.WriteNumber(name, number);
                 break;
+            case float number when float.IsFinite(number):
+                writer.WriteNumber(name, number);
+                break;
+            case uint number:
+                writer.WriteNumber(name, number);
+                break;
+            case ulong number:
+                writer.WriteNumber(name, number);
+                break;
+            // Widened rather than given a case each. Utf8JsonWriter has no overload for the narrower
+            // integer types, and JSON has one number type regardless.
+            case byte or sbyte or short or ushort:
+                writer.WriteNumber(name, Convert.ToInt32(value, CultureInfo.InvariantCulture));
+                break;
             case decimal number:
                 writer.WriteNumber(name, number);
                 break;
@@ -239,18 +277,21 @@ public sealed class FlatJsonConsoleFormatter : ConsoleFormatter
         }
     }
 
-    private void WriteTimestamp(Utf8JsonWriter writer)
+    /// <returns>True when a timestamp was written, so the name is reserved only when it is taken.</returns>
+    private bool WriteTimestamp(Utf8JsonWriter writer)
     {
-        var format = this.options.TimestampFormat;
+        var format = _options.TimestampFormat;
 
         if (format is null)
         {
-            return;
+            return false;
         }
 
-        var now = this.options.UseUtcTimestamp ? DateTimeOffset.UtcNow : DateTimeOffset.Now;
+        var now = _options.UseUtcTimestamp ? DateTimeOffset.UtcNow : DateTimeOffset.Now;
 
         writer.WriteString(TimestampField, now.ToString(format, CultureInfo.InvariantCulture));
+
+        return true;
     }
 
     /// <remarks>
@@ -281,35 +322,6 @@ public sealed class FlatJsonConsoleFormatter : ConsoleFormatter
 
     private static bool IsOriginalFormat(string key) =>
         string.Equals(key, OriginalFormatKey, StringComparison.Ordinal);
-
-    /// <summary>
-    /// The names this formatter writes itself, which no scope or state field may take.
-    /// </summary>
-    private static readonly HashSet<string> ReservedFields = new(StringComparer.Ordinal)
-    {
-        TimestampField,
-        LogLevelField,
-        LogEventIdField,
-        LogEventField,
-        CategoryField,
-        MessageField,
-        ExceptionTypeField,
-        ExceptionStackTraceField,
-    };
-
-    /// <summary>
-    /// Moves a field aside when its name is one this formatter has already written.
-    /// </summary>
-    /// <remarks>
-    /// This formatter serves every logger in the process, and a third-party template using
-    /// <c>{Message}</c> would otherwise produce a line with two properties of that name. Utf8JsonWriter
-    /// does not reject a duplicate key even with validation on, and a reader's choice between the two
-    /// is undefined, so one of the values would be silently unreachable. Renaming rather than dropping
-    /// keeps the value: a line that loses a field an operator went looking for is the same problem in
-    /// a quieter form.
-    /// </remarks>
-    private static string QualifyIfReserved(string name) =>
-        ReservedFields.Contains(name) ? ReservedFieldPrefix + name : name;
 
     /// <remarks>
     /// An underscore rather than a dot: CloudWatch Logs Insights reads a dot as a path separator and

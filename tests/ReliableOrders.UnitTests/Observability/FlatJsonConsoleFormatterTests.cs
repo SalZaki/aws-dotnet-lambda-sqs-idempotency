@@ -78,9 +78,7 @@ public sealed class FlatJsonConsoleFormatterTests
 
         using (logger.BeginScope(new Dictionary<string, object> { ["Depth"] = "scope" }))
         {
-#pragma warning disable CA1848 // An ad-hoc template is what this test is about.
             logger.LogInformation("Depth is {Depth}", "state");
-#pragma warning restore CA1848
         }
 
         Assert.Equal("state", capture.SingleLine.GetProperty("Depth").GetString());
@@ -125,9 +123,7 @@ public sealed class FlatJsonConsoleFormatterTests
 
         var logger = factory.CreateLogger("Test");
 
-#pragma warning disable CA1848 // An ad-hoc template is what this test is about.
         logger.LogInformation("Value is {Value}", "first\nsecond");
-#pragma warning restore CA1848
 
         Assert.Equal("first\nsecond", capture.SingleLine.GetProperty("Value").GetString());
     }
@@ -175,9 +171,7 @@ public sealed class FlatJsonConsoleFormatterTests
 
         var logger = factory.CreateLogger("Test");
 
-#pragma warning disable CA1848 // A third-party template is what this test stands in for.
         logger.LogInformation("Something about {Message} and {Category}", "a value", "another");
-#pragma warning restore CA1848
 
         var line = capture.SingleLine;
 
@@ -203,9 +197,7 @@ public sealed class FlatJsonConsoleFormatterTests
 
         var logger = factory.CreateLogger("Test");
 
-#pragma warning disable CA1848 // A templated scope is exactly what this test stands in for.
         using (logger.BeginScope("processing {Thing}", "an order"))
-#pragma warning restore CA1848
         {
             Emit(logger);
         }
@@ -235,9 +227,7 @@ public sealed class FlatJsonConsoleFormatterTests
 
         var logger = factory.CreateLogger("Test");
 
-#pragma warning disable CA1848 // An ad-hoc template is what this test is about.
         logger.LogInformation("Rate is {Rate}", value);
-#pragma warning restore CA1848
 
         Assert.Equal(expected, capture.SingleLine.GetProperty("Rate").GetString());
     }
@@ -253,9 +243,7 @@ public sealed class FlatJsonConsoleFormatterTests
 
         var logger = factory.CreateLogger("Test");
 
-#pragma warning disable CA1848 // An ad-hoc template is what this test is about.
         logger.LogInformation("Rate is {Rate}", 0.25d);
-#pragma warning restore CA1848
 
         Assert.Equal(0.25d, capture.SingleLine.GetProperty("Rate").GetDouble());
     }
@@ -284,6 +272,92 @@ public sealed class FlatJsonConsoleFormatterTests
         Assert.False(capture.SingleLine.TryGetProperty("Depth", out _));
     }
 
+    /// <summary>
+    /// A formatter failure drops its line and says so, rather than reaching the caller.
+    /// </summary>
+    /// <remarks>
+    /// Formatting runs on the caller's thread here. Without this, a state value whose
+    /// <c>ToString</c> throws would leave the log call throwing into record processing, and a handler
+    /// would return an order it had already committed as a batch item failure.
+    /// </remarks>
+    [Fact]
+    public void A_value_that_throws_while_formatting_does_not_reach_the_caller()
+    {
+        using var capture = new JsonLogCapture();
+        using var factory = JsonLogCapture.FactoryFor(capture);
+
+        var logger = factory.CreateLogger("Test");
+
+        logger.LogInformation("Value is {Value}", new ThrowsWhenFormatted());
+
+        var line = capture.SingleLine;
+
+        Assert.Equal("Error", line.GetProperty("LogLevel").GetString());
+        Assert.Contains("dropped", line.GetProperty("Message").GetString()!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every numeric type stays a number, not just the four with a direct writer overload.
+    /// </summary>
+    /// <remarks>
+    /// A missed type arrives as a quoted string, and a Logs Insights query that averages it returns no
+    /// rows rather than an error — the silent empty result this formatter exists to avoid.
+    /// </remarks>
+    [Theory]
+    [InlineData((int)12)]
+    [InlineData((long)12)]
+    [InlineData((uint)12)]
+    [InlineData((ulong)12)]
+    [InlineData((short)12)]
+    [InlineData((ushort)12)]
+    [InlineData((byte)12)]
+    [InlineData((sbyte)12)]
+    [InlineData(12.0f)]
+    [InlineData(12.0d)]
+    public void Every_numeric_type_keeps_its_json_type(object value)
+    {
+        using var capture = new JsonLogCapture();
+        using var factory = JsonLogCapture.FactoryFor(capture);
+
+        var logger = factory.CreateLogger("Test");
+
+        logger.LogInformation("Depth is {Depth}", value);
+
+        Assert.Equal(12, capture.SingleLine.GetProperty("Depth").GetDouble());
+    }
+
+    /// <summary>
+    /// A name the record did not write is left alone.
+    /// </summary>
+    /// <remarks>
+    /// <c>Timestamp</c> is only written when a format is configured. Reserving it regardless would
+    /// move a field genuinely called <c>Timestamp</c> aside while leaving the name free, putting the
+    /// value at a path no query written against the production shape would match.
+    /// </remarks>
+    [Fact]
+    public void A_reserved_name_the_record_did_not_write_is_not_taken()
+    {
+        using var capture = new JsonLogCapture(new ConsoleFormatterOptions { IncludeScopes = true });
+        using var factory = JsonLogCapture.FactoryFor(capture);
+
+        var logger = factory.CreateLogger("Test");
+
+        logger.LogInformation("A line with {Timestamp}", "a value of its own");
+
+        var line = capture.SingleLine;
+
+        Assert.Equal("a value of its own", line.GetProperty("Timestamp").GetString());
+        Assert.False(line.TryGetProperty("Field_Timestamp", out _));
+    }
+
+    /// <summary>
+    /// Stands in for a state value that fails while being written.
+    /// </summary>
+    private sealed class ThrowsWhenFormatted
+    {
+        public override string ToString() => throw new InvalidOperationException("cannot render");
+    }
+
     private const string Service = "reliable-orders";
     private const string Environment = "test";
     private const string LambdaRequestId = "8f0a5d5e-1f2b-4c6d-9f5a-2b7c8d9e0f11";
@@ -293,8 +367,6 @@ public sealed class FlatJsonConsoleFormatterTests
 
     private static void Emit(ILogger logger)
     {
-#pragma warning disable CA1848 // A plain line, for tests about the formatter rather than about events.
         logger.LogInformation("A line");
-#pragma warning restore CA1848
     }
 }

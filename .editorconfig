@@ -252,3 +252,23 @@ dotnet_diagnostic.CA1707.severity = none
 
 # CA1515 asks public types to be internal. Test classes must stay public for xunit to discover them.
 dotnet_diagnostic.CA1515.severity = none
+
+# CA1848 and CA1873 both police how production code logs: use a generated LoggerMessage, and do not
+# evaluate an argument for a line that may not be written. Neither applies to a test whose subject is
+# the logging pipeline itself. These suites call ILogger directly on purpose, because an ad-hoc
+# template is exactly what a third-party library will emit through this formatter, and they pass
+# arguments that are expensive on purpose, because argument evaluation is the behaviour under test.
+# Off here and on everywhere else, so an ad-hoc log call added to the service still fails the build.
+dotnet_diagnostic.CA1848.severity = none
+dotnet_diagnostic.CA1873.severity = none
+
+[src/ReliableOrders.Core/Observability/ProcessingLog.cs]
+# CA1873 flags an argument that is a method call on a logging call, because the argument is evaluated
+# whether or not the level is enabled. Every log method here is a source-generated LoggerMessage, and
+# the arguments it flags are Milliseconds(duration) — a cast and a rounding, no allocation. Wrapping
+# the call in an ILogger.IsEnabled check does not clear the rule for a generated method, so the choice
+# is between suppressing it and contorting the call to hide a helper the rule cannot price. The one
+# argument that is genuinely worth not computing, DescribeFailures on the validation event, is guarded
+# on its own merits and stays guarded. Scoped to this file so a genuinely expensive log argument
+# elsewhere is still reported.
+dotnet_diagnostic.CA1873.severity = none

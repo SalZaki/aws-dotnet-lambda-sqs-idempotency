@@ -33,8 +33,8 @@ namespace ReliableOrders.Function.Observability;
 [ProviderAlias("SynchronousConsole")]
 public sealed class SynchronousConsoleLoggerProvider : ILoggerProvider, ISupportExternalScope
 {
-    private readonly TextWriter output;
-    private readonly ConsoleFormatter formatter;
+    private readonly TextWriter _output;
+    private readonly ConsoleFormatter _formatter;
 
     /// <remarks>
     /// One line is one CloudWatch record, so two threads writing at once would produce interleaved
@@ -42,9 +42,9 @@ public sealed class SynchronousConsoleLoggerProvider : ILoggerProvider, ISupport
     /// expected to gain bounded parallelism, so the lock is what keeps that change from turning log
     /// lines into fragments.
     /// </remarks>
-    private readonly Lock gate = new();
+    private readonly Lock _gate = new();
 
-    private IExternalScopeProvider scopeProvider = new LoggerExternalScopeProvider();
+    private IExternalScopeProvider _scopeProvider = new LoggerExternalScopeProvider();
 
     /// <summary>
     /// Creates a provider writing through the given formatter.
@@ -56,8 +56,8 @@ public sealed class SynchronousConsoleLoggerProvider : ILoggerProvider, ISupport
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(formatter);
 
-        this.output = output;
-        this.formatter = formatter;
+        _output = output;
+        _formatter = formatter;
     }
 
     /// <inheritdoc/>
@@ -68,7 +68,7 @@ public sealed class SynchronousConsoleLoggerProvider : ILoggerProvider, ISupport
     {
         ArgumentNullException.ThrowIfNull(scopeProvider);
 
-        this.scopeProvider = scopeProvider;
+        _scopeProvider = scopeProvider;
     }
 
     /// <summary>
@@ -82,12 +82,57 @@ public sealed class SynchronousConsoleLoggerProvider : ILoggerProvider, ISupport
     {
     }
 
+    /// <remarks>
+    /// Formatting runs on the caller's thread, which is the whole point of this provider and also the
+    /// one thing it has to make safe. The framework's provider formats on a background thread, where a
+    /// formatter failure can never reach the work being logged about; here an exception would leave
+    /// <see cref="ILogger.Log"/> throwing into record processing, and a handler would classify a
+    /// committed order as a failed one and return it for redelivery. A state value whose
+    /// <c>ToString</c> throws is enough to cause it. Telemetry does not get to fail the work it
+    /// describes.
+    /// </remarks>
     private void Write<TState>(in LogEntry<TState> entry)
     {
-        lock (this.gate)
+        lock (_gate)
         {
-            this.formatter.Write(in entry, this.scopeProvider, this.output);
-            this.output.Flush();
+            try
+            {
+                _formatter.Write(in entry, _scopeProvider, _output);
+                _output.Flush();
+            }
+#pragma warning disable CA1031 // Anything the formatter throws has to stop here, whatever it is.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                ReportDroppedLine(exception);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Says that a line was dropped, in as few moving parts as possible.
+    /// </summary>
+    /// <remarks>
+    /// Swallowing outright would leave an operator reading a log with holes in it and no way to know.
+    /// This writes no scope, no state and no message text — only the exception's type, which is a CLR
+    /// type name and so contains nothing JSON would need escaped. If even that fails there is nothing
+    /// left to try, and the alternative to giving up is a formatter failure taking down the record.
+    /// </remarks>
+    private void ReportDroppedLine(Exception exception)
+    {
+        try
+        {
+            _output.WriteLine(
+                "{\"LogLevel\":\"Error\",\"Category\":\"" + typeof(SynchronousConsoleLoggerProvider).FullName
+                + "\",\"Message\":\"A log line could not be formatted and was dropped\",\"ExceptionType\":\""
+                + exception.GetType().FullName + "\"}");
+
+            _output.Flush();
+        }
+#pragma warning disable CA1031 // Last resort. There is no further place to report a failure to.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
         }
     }
 
@@ -101,7 +146,7 @@ public sealed class SynchronousConsoleLoggerProvider : ILoggerProvider, ISupport
     {
         public IDisposable? BeginScope<TState>(TState state)
             where TState : notnull =>
-            provider.scopeProvider.Push(state);
+            provider._scopeProvider.Push(state);
 
         public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
 

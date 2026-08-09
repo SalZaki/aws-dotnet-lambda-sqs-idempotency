@@ -51,9 +51,9 @@ namespace ReliableOrders.Core.Observability;
 /// </remarks>
 public sealed partial class ProcessingLog
 {
-    private readonly ILogger logger;
-    private readonly string service;
-    private readonly string environment;
+    private readonly ILogger _logger;
+    private readonly string _service;
+    private readonly string _environment;
 
     /// <summary>
     /// Creates a log for one execution environment.
@@ -67,9 +67,9 @@ public sealed partial class ProcessingLog
         ArgumentException.ThrowIfNullOrWhiteSpace(service);
         ArgumentException.ThrowIfNullOrWhiteSpace(environment);
 
-        this.logger = logger;
-        this.service = service;
-        this.environment = environment;
+        _logger = logger;
+        _service = service;
+        _environment = environment;
     }
 
     /// <summary>
@@ -87,10 +87,10 @@ public sealed partial class ProcessingLog
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(lambdaRequestId);
 
-        return this.logger.BeginScope(new Dictionary<string, object>(StringComparer.Ordinal)
+        return _logger.BeginScope(new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            [LogFields.Service] = this.service,
-            [LogFields.Environment] = this.environment,
+            [LogFields.Service] = _service,
+            [LogFields.Environment] = _environment,
             [LogFields.LambdaRequestId] = lambdaRequestId,
         }) ?? NullScope.Instance;
     }
@@ -112,7 +112,7 @@ public sealed partial class ProcessingLog
         ArgumentException.ThrowIfNullOrWhiteSpace(sqsMessageId);
         ArgumentOutOfRangeException.ThrowIfLessThan(approximateReceiveCount, 1);
 
-        return this.logger.BeginScope(new Dictionary<string, object>(StringComparer.Ordinal)
+        return _logger.BeginScope(new Dictionary<string, object>(StringComparer.Ordinal)
         {
             [LogFields.SqsMessageId] = sqsMessageId,
             [LogFields.ApproximateReceiveCount] = approximateReceiveCount,
@@ -148,14 +148,14 @@ public sealed partial class ProcessingLog
             state[LogFields.CorrelationId] = correlationId;
         }
 
-        return this.logger.BeginScope(state) ?? NullScope.Instance;
+        return _logger.BeginScope(state) ?? NullScope.Instance;
     }
 
     /// <summary>
     /// An invocation has begun.
     /// </summary>
     /// <param name="recordCount">How many records it received.</param>
-    public void BatchStarted(int recordCount) => this.LogBatchStarted(recordCount);
+    public void BatchStarted(int recordCount) => LogBatchStarted(recordCount);
 
     /// <summary>
     /// An invocation has finished.
@@ -169,7 +169,7 @@ public sealed partial class ProcessingLog
     /// <param name="failureCount">How many are being returned as batch item failures.</param>
     /// <param name="duration">How long the invocation's record processing took.</param>
     public void BatchCompleted(int recordCount, int failureCount, TimeSpan duration) =>
-        this.LogBatchCompleted(
+        LogBatchCompleted(
             failureCount > 0 ? LogLevel.Warning : LogLevel.Information,
             failureCount,
             recordCount,
@@ -181,7 +181,7 @@ public sealed partial class ProcessingLog
     /// <param name="reason">A value from <see cref="Contracts.ParseFailureReason"/>.</param>
     /// <param name="duration">How long the record took.</param>
     public void MessageParsingFailed(string reason, TimeSpan duration) =>
-        this.LogMessageParsingFailed(reason, Milliseconds(duration), PermanentFailureOutcome);
+        LogMessageParsingFailed(reason, Milliseconds(duration), PermanentFailureOutcome);
 
     /// <summary>
     /// A parsed event broke one or more contract rules.
@@ -197,7 +197,14 @@ public sealed partial class ProcessingLog
     {
         ArgumentNullException.ThrowIfNull(result);
 
-        this.LogMessageValidationFailed(DescribeFailures(result), Milliseconds(duration), PermanentFailureOutcome);
+        // DescribeFailures joins and formats the whole failure list, and is the one argument in this
+        // type expensive enough to be worth not computing. The generated method checks the level
+        // itself, but only after its arguments have been evaluated, so the work would be done and
+        // thrown away on a service running above Warning.
+        if (_logger.IsEnabled(ValidationFailureLevel))
+        {
+            LogMessageValidationFailed(DescribeFailures(result), Milliseconds(duration), PermanentFailureOutcome);
+        }
     }
 
     /// <summary>
@@ -205,7 +212,7 @@ public sealed partial class ProcessingLog
     /// </summary>
     /// <param name="duration">How long the record took.</param>
     public void OrderCreated(TimeSpan duration) =>
-        this.LogOrderCreated(Milliseconds(duration), ProcessedOutcome);
+        LogOrderCreated(Milliseconds(duration), ProcessedOutcome);
 
     /// <summary>
     /// The work was already done and the stored data agreed.
@@ -218,7 +225,7 @@ public sealed partial class ProcessingLog
     /// <param name="scope">Which safeguard recognised it.</param>
     /// <param name="duration">How long the record took.</param>
     public void DuplicateIgnored(DuplicateScope scope, TimeSpan duration) =>
-        this.LogDuplicateIgnored(scope, Milliseconds(duration), DuplicateOutcome);
+        LogDuplicateIgnored(scope, Milliseconds(duration), DuplicateOutcome);
 
     /// <summary>
     /// One identity is claimed by two payloads that disagree.
@@ -244,7 +251,7 @@ public sealed partial class ProcessingLog
     /// <param name="computedHash">The hash this event produced, as hexadecimal.</param>
     /// <param name="duration">How long the record took.</param>
     public void IdempotencyConflict(ConflictScope scope, string reason, string computedHash, TimeSpan duration) =>
-        this.LogIdempotencyConflict(scope, reason, computedHash, Milliseconds(duration), PermanentFailureOutcome);
+        LogIdempotencyConflict(scope, reason, computedHash, Milliseconds(duration), PermanentFailureOutcome);
 
     /// <summary>
     /// The attempt failed for a reason that may not recur, and the record will be redelivered.
@@ -252,7 +259,7 @@ public sealed partial class ProcessingLog
     /// <param name="reason">A value from <see cref="WriteFailureReason"/>.</param>
     /// <param name="duration">How long the record took.</param>
     public void TransientProcessingFailure(string reason, TimeSpan duration) =>
-        this.LogTransientProcessingFailure(reason, Milliseconds(duration), TransientFailureOutcome);
+        LogTransientProcessingFailure(reason, Milliseconds(duration), TransientFailureOutcome);
 
     /// <summary>
     /// The request was one the store will never accept, which is a fault in this service.
@@ -265,7 +272,7 @@ public sealed partial class ProcessingLog
     /// <param name="reason">A value from <see cref="WriteFailureReason"/>.</param>
     /// <param name="duration">How long the record took.</param>
     public void PermanentProcessingFailure(string reason, TimeSpan duration) =>
-        this.LogPermanentProcessingFailure(reason, Milliseconds(duration), PermanentFailureOutcome);
+        LogPermanentProcessingFailure(reason, Milliseconds(duration), PermanentFailureOutcome);
 
     /// <summary>
     /// A record was returned unattempted because too little invocation time remained.
@@ -278,7 +285,7 @@ public sealed partial class ProcessingLog
     /// </remarks>
     /// <param name="remaining">Invocation time left when the record was deferred.</param>
     public void ProcessingDeadlineReached(TimeSpan remaining) =>
-        this.LogProcessingDeadlineReached(Milliseconds(remaining), DeadlineDeferredOutcome);
+        LogProcessingDeadlineReached(Milliseconds(remaining), DeadlineDeferredOutcome);
 
     // The generated overloads. Prefixed rather than overloaded so a call site reads as one or the
     // other, and named through nameof so a rename of the public method carries the log event's name
@@ -306,7 +313,7 @@ public sealed partial class ProcessingLog
     [LoggerMessage(
         EventId = LogEvents.MessageValidationFailed,
         EventName = nameof(MessageValidationFailed),
-        Level = LogLevel.Warning,
+        Level = ValidationFailureLevel,
         Message = "Message validation failed on {FailedRules} after {DurationMs}ms, outcome {Outcome}")]
     private partial void LogMessageValidationFailed(string failedRules, long durationMs, string outcome);
 
@@ -358,6 +365,17 @@ public sealed partial class ProcessingLog
         Message = "Processing deadline reached with {RemainingMs}ms remaining, outcome {Outcome}")]
     private partial void LogProcessingDeadlineReached(long remainingMs, string outcome);
 
+    /// <summary>
+    /// The level of the one event whose log call is guarded.
+    /// </summary>
+    /// <remarks>
+    /// Named because the guard and the attribute have to agree, and they sit a hundred lines apart. A
+    /// literal in each would let the attribute be raised to Error while the guard still asked about
+    /// Warning, and on a service configured at Error the guard would answer false and drop an event
+    /// the log statement would have written.
+    /// </remarks>
+    private const LogLevel ValidationFailureLevel = LogLevel.Warning;
+
     private const string ProcessedOutcome = "Processed";
     private const string DuplicateOutcome = "Duplicate";
     private const string PermanentFailureOutcome = "PermanentFailure";
@@ -365,9 +383,16 @@ public sealed partial class ProcessingLog
     private const string DeadlineDeferredOutcome = "DeadlineDeferred";
 
     /// <remarks>
+    /// <para>
     /// Rounded to whole milliseconds. Sub-millisecond precision on a duration dominated by a network
     /// round trip is noise, and a whole number keeps the field comparable across the log, the metric,
     /// and the span that report the same work.
+    /// </para>
+    /// <para>
+    /// A call rather than an inline expression, which is what CA1873 objects to when it appears as an
+    /// argument to a log method. The rule is suppressed for this file rather than worked around; the
+    /// reasoning is in <c>.editorconfig</c> beside the suppression.
+    /// </para>
     /// </remarks>
     private static long Milliseconds(TimeSpan duration) => (long)Math.Round(duration.TotalMilliseconds);
 

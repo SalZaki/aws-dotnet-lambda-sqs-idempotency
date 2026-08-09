@@ -24,12 +24,12 @@ namespace ReliableOrders.UnitTests.Observability;
 /// </remarks>
 internal sealed class JsonLogCapture : IDisposable
 {
-    private readonly StringWriter writer = new();
-    private readonly SynchronousConsoleLoggerProvider provider;
+    private readonly StringWriter _writer = new();
+    private readonly SynchronousConsoleLoggerProvider _provider;
 
     public JsonLogCapture(ConsoleFormatterOptions? options = null) =>
-        this.provider = new SynchronousConsoleLoggerProvider(
-            this.writer,
+        _provider = new SynchronousConsoleLoggerProvider(
+            _writer,
             new FlatJsonConsoleFormatter(options ?? new ConsoleFormatterOptions { IncludeScopes = true }));
 
     /// <summary>
@@ -38,7 +38,7 @@ internal sealed class JsonLogCapture : IDisposable
     /// </summary>
     public IReadOnlyList<JsonElement> Lines =>
     [
-        .. this.writer.ToString()
+        .. _writer.ToString()
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(line => JsonDocument.Parse(line).RootElement.Clone()),
     ];
@@ -46,7 +46,7 @@ internal sealed class JsonLogCapture : IDisposable
     /// <summary>
     /// The only line written, failing with the actual count when there is not exactly one.
     /// </summary>
-    public JsonElement SingleLine => Assert.Single(this.Lines);
+    public JsonElement SingleLine => Assert.Single(Lines);
 
     /// <summary>
     /// A factory wired to this capture, with filtering left wide open so a test sees what the
@@ -56,12 +56,12 @@ internal sealed class JsonLogCapture : IDisposable
         LoggerFactory.Create(builder =>
         {
             builder.SetMinimumLevel(LogLevel.Trace);
-            builder.AddProvider(capture.provider);
+            builder.AddProvider(capture._provider);
         });
 
     public void Dispose()
     {
-        this.provider.Dispose();
-        this.writer.Dispose();
+        _provider.Dispose();
+        _writer.Dispose();
     }
 }

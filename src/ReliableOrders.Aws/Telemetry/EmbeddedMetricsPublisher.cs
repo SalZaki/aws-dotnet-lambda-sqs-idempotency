@@ -31,11 +31,11 @@ namespace ReliableOrders.Aws.Telemetry;
 /// </remarks>
 public sealed class EmbeddedMetricsPublisher
 {
-    private readonly TextWriter output;
-    private readonly TimeProvider clock;
-    private readonly string metricNamespace;
-    private readonly string service;
-    private readonly string environment;
+    private readonly TextWriter _output;
+    private readonly TimeProvider _clock;
+    private readonly string _metricNamespace;
+    private readonly string _service;
+    private readonly string _environment;
 
     /// <summary>
     /// Creates a publisher for one execution environment.
@@ -63,11 +63,11 @@ public sealed class EmbeddedMetricsPublisher
         ArgumentException.ThrowIfNullOrWhiteSpace(service);
         ArgumentException.ThrowIfNullOrWhiteSpace(environment);
 
-        this.output = output;
-        this.clock = clock;
-        this.metricNamespace = metricNamespace;
-        this.service = service;
-        this.environment = environment;
+        _output = output;
+        _clock = clock;
+        _metricNamespace = metricNamespace;
+        _service = service;
+        _environment = environment;
     }
 
     /// <summary>
@@ -130,58 +130,75 @@ public sealed class EmbeddedMetricsPublisher
     /// </remarks>
     private sealed class InvocationMetrics(EmbeddedMetricsPublisher publisher, int recordCount) : IInvocationMetrics
     {
-        private readonly Lock gate = new();
-        private readonly List<long> latencies = [];
-        private readonly Dictionary<string, long> counts = new(StringComparer.Ordinal);
-        private int failures;
-        private bool published;
+        private readonly Lock _gate = new();
+        private readonly List<long> _latencies = [];
+        private readonly Dictionary<string, long> _counts = new(StringComparer.Ordinal);
+        private int _failures;
+        private bool _published;
 
-        public void OrderProcessed(TimeSpan duration) => this.Record(MetricNames.OrdersProcessed, duration);
+        public void OrderProcessed(TimeSpan duration) => Record(MetricNames.OrdersProcessed, duration);
 
-        public void DuplicateEvent(TimeSpan duration) => this.Record(MetricNames.DuplicateEvents, duration);
+        public void DuplicateEvent(TimeSpan duration) => Record(MetricNames.DuplicateEvents, duration);
 
         public void InvalidEvent(int approximateReceiveCount, TimeSpan duration) =>
-            this.RecordPermanent(MetricNames.ValidationFailures, approximateReceiveCount, duration);
+            RecordPermanent(MetricNames.ValidationFailures, approximateReceiveCount, duration);
 
         public void IdempotencyConflict(int approximateReceiveCount, TimeSpan duration) =>
-            this.RecordPermanent(MetricNames.IdempotencyConflicts, approximateReceiveCount, duration);
+            RecordPermanent(MetricNames.IdempotencyConflicts, approximateReceiveCount, duration);
 
         public void PermanentFault(int approximateReceiveCount, TimeSpan duration) =>
-            this.RecordPermanent(MetricNames.PermanentFaults, approximateReceiveCount, duration);
+            RecordPermanent(MetricNames.PermanentFaults, approximateReceiveCount, duration);
 
         public void TransientFailure(TimeSpan duration)
         {
-            lock (this.gate)
+            lock (_gate)
             {
-                this.Increment(MetricNames.TransientFailures);
-                this.latencies.Add(Milliseconds(duration));
-                this.failures++;
+                Increment(MetricNames.TransientFailures);
+                _latencies.Add(Milliseconds(duration));
+                _failures++;
             }
         }
 
         public void DeadlineDeferral()
         {
-            lock (this.gate)
+            lock (_gate)
             {
-                this.Increment(MetricNames.DeadlineDeferrals);
-                this.failures++;
+                Increment(MetricNames.DeadlineDeferrals);
+                _failures++;
             }
         }
 
+        /// <remarks>
+        /// Publishing writes and flushes, so it can fail — a broken pipe on a sandbox being reclaimed
+        /// is enough. Disposal usually runs from a <c>using</c>, and an exception thrown there while
+        /// the block is already unwinding replaces the exception that caused the unwinding: the
+        /// failure an operator needs would be lost and an I/O error reported in its place. A failed
+        /// publish costs one invocation's metrics, which is the smaller loss by a wide margin.
+        /// </remarks>
         public void Dispose()
         {
-            lock (this.gate)
+            lock (_gate)
             {
                 // Publishing twice would double every count. Disposal is idempotent rather than
                 // guarded at the call site because the handler is expected to dispose inside a using
-                // and may also dispose on an error path.
-                if (this.published)
+                // and may also dispose on an error path. The flag is set before the write, not after,
+                // so a write that failed halfway is not repeated on a second disposal.
+                if (_published)
                 {
                     return;
                 }
 
-                this.published = true;
-                publisher.Publish(recordCount, this.failures, this.counts, this.latencies);
+                _published = true;
+
+                try
+                {
+                    publisher.Publish(recordCount, _failures, _counts, _latencies);
+                }
+#pragma warning disable CA1031 // Nothing a write throws may escape a Dispose.
+                catch (Exception)
+#pragma warning restore CA1031
+                {
+                }
             }
         }
 
@@ -197,29 +214,29 @@ public sealed class EmbeddedMetricsPublisher
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(approximateReceiveCount, 1);
 
-            lock (this.gate)
+            lock (_gate)
             {
                 if (approximateReceiveCount == 1)
                 {
-                    this.Increment(metric);
+                    Increment(metric);
                 }
 
-                this.latencies.Add(Milliseconds(duration));
-                this.failures++;
+                _latencies.Add(Milliseconds(duration));
+                _failures++;
             }
         }
 
         private void Record(string metric, TimeSpan duration)
         {
-            lock (this.gate)
+            lock (_gate)
             {
-                this.Increment(metric);
-                this.latencies.Add(Milliseconds(duration));
+                Increment(metric);
+                _latencies.Add(Milliseconds(duration));
             }
         }
 
         private void Increment(string metric) =>
-            this.counts[metric] = this.counts.TryGetValue(metric, out var current) ? current + 1 : 1;
+            _counts[metric] = _counts.TryGetValue(metric, out var current) ? current + 1 : 1;
 
         /// <remarks>
         /// Whole milliseconds, matching the log's <c>DurationMs</c> so the same work reads the same in
@@ -251,7 +268,7 @@ public sealed class EmbeddedMetricsPublisher
         Dictionary<string, long> counts,
         List<long> latencies)
     {
-        var timestamp = this.clock.GetUtcNow().ToUnixTimeMilliseconds();
+        var timestamp = _clock.GetUtcNow().ToUnixTimeMilliseconds();
 
         foreach (var metric in ContinuousCounters)
         {
@@ -261,11 +278,11 @@ public sealed class EmbeddedMetricsPublisher
         // The first record carries the counters. Any latency values beyond what one EMF record may
         // hold follow in further records, which carry nothing else — splitting the samples keeps the
         // distribution complete, while repeating the counters alongside them would double every count.
-        this.WriteRecord(timestamp, counts, recordCount, failures, latencies.Take(MaxValuesPerMetric));
+        WriteRecord(timestamp, counts, recordCount, failures, latencies.Take(MaxValuesPerMetric));
 
         for (var offset = MaxValuesPerMetric; offset < latencies.Count; offset += MaxValuesPerMetric)
         {
-            this.WriteRecord(
+            WriteRecord(
                 timestamp,
                 counts: null,
                 recordCount: null,
@@ -273,7 +290,7 @@ public sealed class EmbeddedMetricsPublisher
                 latencies.Skip(offset).Take(MaxValuesPerMetric));
         }
 
-        this.output.Flush();
+        _output.Flush();
     }
 
     private void WriteRecord(
@@ -320,10 +337,10 @@ public sealed class EmbeddedMetricsPublisher
         {
             writer.WriteStartObject();
 
-            WriteMetadata(writer, timestamp, this.metricNamespace, published);
+            WriteMetadata(writer, timestamp, _metricNamespace, published);
 
-            writer.WriteString(LogFields.Service, this.service);
-            writer.WriteString(LogFields.Environment, this.environment);
+            writer.WriteString(LogFields.Service, _service);
+            writer.WriteString(LogFields.Environment, _environment);
 
             if (recordCount is { } size)
             {
@@ -359,7 +376,7 @@ public sealed class EmbeddedMetricsPublisher
             writer.Flush();
         }
 
-        this.output.WriteLine(Encoding.UTF8.GetString(buffer.WrittenSpan));
+        _output.WriteLine(Encoding.UTF8.GetString(buffer.WrittenSpan));
     }
 
     /// <remarks>

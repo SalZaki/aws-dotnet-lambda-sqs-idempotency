@@ -200,9 +200,7 @@ public sealed class LogRedactionTests
         var logger = factory.CreateLogger("Amazon.DynamoDBv2");
         var thrown = Caught();
 
-#pragma warning disable CA1848 // A raw call is the point: this is what a third-party logger does.
         logger.LogError(thrown, "Transaction failed");
-#pragma warning restore CA1848
 
         var line = capture.SingleLine;
 

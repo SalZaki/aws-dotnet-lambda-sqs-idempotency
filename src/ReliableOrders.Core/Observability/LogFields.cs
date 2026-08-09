@@ -6,9 +6,18 @@ namespace ReliableOrders.Core.Observability;
 /// <remarks>
 /// <para>
 /// A log field's name is an interface. Operators write CloudWatch Logs Insights queries against these
-/// strings, alarms are built on those queries, and neither the compiler nor a test in this repository
-/// sees a query break when a name is edited. Naming them once here means a rename is a single edit
-/// that every writer follows, rather than a search across format strings.
+/// strings and alarms are built on those queries, so naming them once gives the repository somewhere
+/// to state what a field is called and why.
+/// </para>
+/// <para>
+/// Only some of them are the source of truth, and it is worth being exact about which. The scope keys
+/// — service, environment, request, message, receive count and the three identity fields — are read
+/// from here by <see cref="ProcessingLog"/>, so renaming one of those is a single edit. The rest name
+/// fields that reach CloudWatch through a <c>LoggerMessage</c> template, and an attribute argument
+/// cannot be interpolated, so those templates spell the name as literal text. Editing
+/// <see cref="Outcome"/> changes nothing about what is written. What keeps the two in step is that the
+/// unit tests assert every emitted field through these constants, so a rename that misses a template
+/// fails the build rather than shipping a query that silently matches nothing.
 /// </para>
 /// <para>
 /// These names match the field list in the Logging Specification section of docs/observability.md.

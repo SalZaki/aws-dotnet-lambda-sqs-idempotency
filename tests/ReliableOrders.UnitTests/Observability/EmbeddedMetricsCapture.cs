@@ -23,11 +23,11 @@ internal sealed class EmbeddedMetricsCapture : IDisposable
     public const string Service = "reliable-orders";
     public const string Environment = "test";
 
-    private readonly StringWriter writer = new();
+    private readonly StringWriter _writer = new();
 
     public EmbeddedMetricsCapture() =>
-        this.Publisher = new EmbeddedMetricsPublisher(
-            this.writer,
+        Publisher = new EmbeddedMetricsPublisher(
+            _writer,
             new FakeTimeProvider(Now),
             MetricNamespace,
             Service,
@@ -41,14 +41,14 @@ internal sealed class EmbeddedMetricsCapture : IDisposable
     /// </summary>
     public IReadOnlyList<JsonElement> Records =>
     [
-        .. this.writer.ToString()
+        .. _writer.ToString()
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(line => JsonDocument.Parse(line).RootElement.Clone()),
     ];
 
-    public JsonElement SingleRecord => Assert.Single(this.Records);
+    public JsonElement SingleRecord => Assert.Single(Records);
 
-    public void Dispose() => this.writer.Dispose();
+    public void Dispose() => _writer.Dispose();
 
     /// <summary>
     /// The value of a counter, or zero when the record does not publish it.
