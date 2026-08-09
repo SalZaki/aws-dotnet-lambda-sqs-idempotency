@@ -74,7 +74,7 @@ than in an issue so the plan and its status cannot drift apart.
 | 20 | `SqsBatchHandlerTests`, from both sides — a mixed batch and a clean one |
 | 21 | `SqsBatchHandlerTests`, over a batch whose records all carry the same event identifier |
 | 22 | `BatchItemFailuresTests`, over null, empty, whitespace and duplicate identifiers |
-| 23 | Waiting on the composition root's serializer context |
+| 23 | `LambdaSerializerTests`, over the bytes the configured serializer writes |
 | 24 | `SqsBatchHandlerTests`, asserting the deferred records never reach the processor |
 | 25 | `LogRedactionTests`, over every event and over the shape of the log's public surface |
 | 26 | `LogRedactionTests`, which also pins the complete field set of a conflict line |
