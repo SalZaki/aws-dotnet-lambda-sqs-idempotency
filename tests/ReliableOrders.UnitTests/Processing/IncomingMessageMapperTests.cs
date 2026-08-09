@@ -81,6 +81,34 @@ public sealed class IncomingMessageMapperTests
         Assert.DoesNotContain("blob", mapped.Attributes);
     }
 
+    /// <summary>
+    /// An attribute is found whatever casing the publisher used.
+    /// </summary>
+    /// <remarks>
+    /// The only documented reader is trace context, W3C header names are case-insensitive, and SQS
+    /// preserves the publisher's casing. Matching ordinally would leave a publisher writing
+    /// <c>TraceParent</c> invisible to a consumer reading <c>traceparent</c>, and the only symptom is
+    /// producer and consumer traces that quietly fail to link — so the comparer is behaviour, and is
+    /// pinned here rather than left to a comment.
+    /// </remarks>
+    [Theory]
+    [InlineData("traceparent")]
+    [InlineData("TraceParent")]
+    [InlineData("TRACEPARENT")]
+    public void An_attribute_is_found_whatever_casing_the_publisher_used(string written)
+    {
+        var record = Record(body: "{}", receiveCount: "1");
+
+        record.MessageAttributes = new Dictionary<string, SQSEvent.MessageAttribute>(StringComparer.Ordinal)
+        {
+            [written] = new() { StringValue = "00-trace-span-01" },
+        };
+
+        var mapped = record.ToIncomingMessage();
+
+        Assert.Equal("00-trace-span-01", Assert.Contains("traceparent", mapped.Attributes));
+    }
+
     [Fact]
     public void A_record_with_no_attributes_maps_to_an_empty_set()
     {
