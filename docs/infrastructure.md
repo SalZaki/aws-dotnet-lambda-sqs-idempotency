@@ -121,10 +121,18 @@ IDEMPOTENCY_TABLE_NAME
 IDEMPOTENCY_RETENTION_DAYS
 POWERTOOLS_SERVICE_NAME       or equivalent service name
 ENVIRONMENT
+METRICS_NAMESPACE
 LOG_LEVEL
 MAX_EVENT_SKEW_FUTURE_HOURS
 MAX_EVENT_SKEW_PAST_DAYS
 ```
+
+`ORDERS_TABLE_NAME`, `IDEMPOTENCY_TABLE_NAME`, `POWERTOOLS_SERVICE_NAME`, `ENVIRONMENT` and
+`METRICS_NAMESPACE` are required and have no defaults: nothing sensible can be assumed for a table
+name, and a defaulted service or environment mislabels every metric in the account. The rest are
+optional and fall back to the values their types already carry. A value that is set but unusable
+fails the cold start naming the variable rather than falling back, because defaulting over it would
+run the service on a number nobody chose while the deployment that set it appeared to take effect.
 
 ### Event Source Mapping
 
