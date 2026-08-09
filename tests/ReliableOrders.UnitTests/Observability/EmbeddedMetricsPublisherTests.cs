@@ -157,6 +157,48 @@ public sealed class EmbeddedMetricsPublisherTests
     }
 
     /// <summary>
+    /// A deferral counts as a failure and contributes no latency.
+    /// </summary>
+    /// <remarks>
+    /// The only outcome that records no duration, and the omission is the design rather than an
+    /// oversight: no work was done, and a near-zero sample would drag the distribution down at exactly
+    /// the moment the handler is under most pressure, which is when that distribution is read. The
+    /// batch here mixes a processed record with a deferred one, so the assertion is that the deferral
+    /// added nothing rather than that the invocation happened to sample nothing.
+    /// </remarks>
+    [Fact]
+    public void A_deadline_deferral_counts_as_a_failure_and_contributes_no_latency()
+    {
+        var record = Publish(
+            2,
+            metrics =>
+            {
+                metrics.OrderProcessed(TimeSpan.FromMilliseconds(15));
+                metrics.DeadlineDeferral();
+            });
+
+        Assert.Equal(1, EmbeddedMetricsCapture.Count(record, MetricNames.DeadlineDeferrals));
+        Assert.Equal(1, EmbeddedMetricsCapture.Count(record, MetricNames.BatchFailures));
+        Assert.Equal([15], EmbeddedMetricsCapture.Latencies(record, MetricNames.RecordProcessingLatency));
+    }
+
+    /// <summary>
+    /// An invocation that only deferred publishes no latency metric at all.
+    /// </summary>
+    /// <remarks>
+    /// EMF rejects an empty array, so the metric has to be absent rather than present and empty. This
+    /// is the case that would produce one if the deferral ever started sampling.
+    /// </remarks>
+    [Fact]
+    public void An_invocation_that_only_deferred_declares_no_latency()
+    {
+        var record = Publish(1, metrics => metrics.DeadlineDeferral());
+
+        Assert.False(EmbeddedMetricsCapture.DeclaresMetric(record, MetricNames.RecordProcessingLatency));
+        Assert.Equal(1, EmbeddedMetricsCapture.Count(record, MetricNames.DeadlineDeferrals));
+    }
+
+    /// <summary>
     /// The story's other criterion. A partial failure is visible on an invocation Lambda calls a
     /// success.
     /// </summary>
