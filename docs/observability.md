@@ -16,8 +16,35 @@ Every record-processing scope should include the following fields.
 - `OrderId`, when parsed
 - `CorrelationId`, when parsed
 - `ApproximateReceiveCount`
-- `Outcome`
-- `DurationMs`
+
+`Outcome` and `DurationMs` are fields of a record's terminal event rather than of its scope. A scope
+is opened before the work it covers, and neither value exists until that work has finished, so no
+ordering makes them available to the lines they would have to precede. Every record reaches exactly
+one terminal event, so a query grouping by `Outcome` still sees each record once.
+
+`ProcessingDeadlineReached` is the one terminal event without `DurationMs`. No work was done, so
+there is no duration, and a zero would drag down any latency derived from that field at the moment
+the handler is under most pressure. It carries `RemainingMs` instead. The metrics side excludes
+deferrals from `RecordProcessingLatency` for the same reason.
+
+Lines are written synchronously, on the thread that logged them. A background writer is the right
+trade for a long-running host and the wrong one here: Lambda freezes the execution environment as
+soon as the handler returns, so a queued line waits for the next thaw and is lost if the environment
+is reclaimed instead. The lines at risk are the last ones written, which is where `BatchCompleted`
+lands. Writing synchronously also keeps log lines and EMF records in the order they happened.
+
+Fields are written flat, at the top level of each line, not nested in a `Scopes` array. The order
+identity scope opens only after a body parses, so a nested field would sit at a different index on a
+parse failure than on a success and one query could not match both.
+
+`EventId` is the publisher's event identifier. The logging framework's own event number is written as
+`LogEventId`, with its name in `LogEvent`, because the two are unrelated and sharing a field would
+replace a UUID with a small integer on every line that carries both.
+
+Exception messages are not written. Their type and stack trace are, which identifies a defect without
+carrying the request bodies and item contents that an SDK exception message holds. A cause an
+operator is meant to read belongs in the fixed-vocabulary `Reason` field, and a failure that must be
+human-readable, such as missing cold-start configuration, is thrown rather than logged.
 
 ### Recommended events
 
@@ -28,6 +55,7 @@ Every record-processing scope should include the following fields.
 - `DuplicateIgnored`
 - `IdempotencyConflict`
 - `TransientProcessingFailure`
+- `PermanentProcessingFailure`
 - `BatchCompleted`
 - `ProcessingDeadlineReached`
 
@@ -50,6 +78,7 @@ Emit custom metrics asynchronously through CloudWatch Embedded Metric Format.
 | `DuplicateEvents` | Count | Duplicate events safely ignored |
 | `ValidationFailures` | Count | Permanently invalid events |
 | `IdempotencyConflicts` | Count | Key or order ID reused with different data |
+| `PermanentFaults` | Count | Requests the store will never accept — a fault in this service |
 | `TransientFailures` | Count | Retryable record failures |
 | `RecordProcessingLatency` | Milliseconds | End-to-end per-record processing duration |
 | `BatchSize` | Count | Number of records received |
@@ -60,6 +89,26 @@ Emit custom metrics asynchronously through CloudWatch Embedded Metric Format.
 
 - `Service`
 - `Environment`
+
+Metrics are aggregated per invocation and published as one EMF record when the invocation ends, with
+each record's latencies carried as an array of values rather than one record per message. Per-record
+EMF is what makes Logs ingestion the dominant cost noted below, and CloudWatch derives the same
+statistics either way. Publishing happens on disposal so an invocation that throws still reports what
+it managed. A batch large enough to exceed EMF's limit of 100 values against one metric publishes the
+remaining samples in further records carrying no counters.
+
+A counter that stayed at zero is omitted rather than published as a zero, so that one poison message
+produces exactly one data point rather than five, one of which is non-zero. Four metrics are exempt
+and are always published. `BatchSize` and `BatchFailures` describe the invocation rather than an
+outcome within it, and a continuous failure series is what makes a partial batch failure legible
+against a run of successful invocations. `OrdersProcessed` and `DuplicateEvents` are exempt because
+alarm 7 is a composite over queue depth and the sum of the two: omitting them when they are zero
+would leave that sum with no datapoints during exactly the outage it watches for, so the alarm would
+report insufficient data rather than firing. None of the four is gated, so exempting them costs the
+first-receipt guarantee nothing.
+
+The CloudWatch namespace is supplied to the publisher by the composition root. It is a deployment
+value, not a constant, and every metric above is published under it.
 
 `Outcome` is **not** a dimension. Specification v1 listed it alongside per-outcome metric names,
 which counted every record twice under two incompatible query shapes. The discrete metric names are

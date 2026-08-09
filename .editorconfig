@@ -226,9 +226,16 @@ dotnet_diagnostic.IDE0005.severity = warning
 dotnet_diagnostic.IDE0051.severity = warning
 dotnet_diagnostic.IDE0052.severity = warning
 
-# CA1848 wants a LoggerMessage delegate for every log call. Story 5.1 decides the logging shape;
-# until then this would fire on every call site and say nothing useful.
-dotnet_diagnostic.CA1848.severity = none
+# CA1848 wants a LoggerMessage delegate for every log call, and Story 5.1 settled that it should get
+# one: every event this service emits is a source-generated LoggerMessage on ProcessingLog. Promoted
+# to warning so an ad-hoc logger.LogInformation added later fails the build rather than quietly
+# bypassing the one type that decides what may be logged.
+dotnet_diagnostic.CA1848.severity = warning
+
+# CA1716 objects to the namespace ReliableOrders.Function.* because Function is a keyword in Visual
+# Basic. The project name is fixed by the Repository Structure section of docs/architecture.md, and
+# the assembly is loaded by the Lambda runtime rather than referenced from another language.
+dotnet_diagnostic.CA1716.severity = none
 
 # Underscores in identifiers. Not enabled at latest-recommended, and switched on here so the
 # exemption for test names below is a real rule with a real exception rather than dead configuration.
@@ -245,3 +252,23 @@ dotnet_diagnostic.CA1707.severity = none
 
 # CA1515 asks public types to be internal. Test classes must stay public for xunit to discover them.
 dotnet_diagnostic.CA1515.severity = none
+
+# CA1848 and CA1873 both police how production code logs: use a generated LoggerMessage, and do not
+# evaluate an argument for a line that may not be written. Neither applies to a test whose subject is
+# the logging pipeline itself. These suites call ILogger directly on purpose, because an ad-hoc
+# template is exactly what a third-party library will emit through this formatter, and they pass
+# arguments that are expensive on purpose, because argument evaluation is the behaviour under test.
+# Off here and on everywhere else, so an ad-hoc log call added to the service still fails the build.
+dotnet_diagnostic.CA1848.severity = none
+dotnet_diagnostic.CA1873.severity = none
+
+[src/ReliableOrders.Core/Observability/ProcessingLog.cs]
+# CA1873 flags an argument that is a method call on a logging call, because the argument is evaluated
+# whether or not the level is enabled. Every log method here is a source-generated LoggerMessage, and
+# the arguments it flags are Milliseconds(duration) — a cast and a rounding, no allocation. Wrapping
+# the call in an ILogger.IsEnabled check does not clear the rule for a generated method, so the choice
+# is between suppressing it and contorting the call to hide a helper the rule cannot price. The one
+# argument that is genuinely worth not computing, DescribeFailures on the validation event, is guarded
+# on its own merits and stays guarded. Scoped to this file so a genuinely expensive log argument
+# elsewhere is still reported.
+dotnet_diagnostic.CA1873.severity = none

@@ -15,6 +15,13 @@
 
   <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <!--
+      Abstractions only in Core: it carries ILogger and EventId and no provider, so the domain can
+      describe what happened without choosing where it is written. The console provider below is a
+      hosting decision and is referenced by ReliableOrders.Function alone.
+    -->
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -76,10 +76,10 @@ than in an issue so the plan and its status cannot drift apart.
 | 22 | Waiting on `SqsBatchHandler` |
 | 23 | Waiting on the composition root's serializer context |
 | 24 | Waiting on `OrderMessageProcessor` |
-| 25 | Waiting on structured logging |
-| 26 | Waiting on structured logging |
-| 27 | Waiting on the metrics implementation |
-| 28 | Waiting on the metrics implementation |
+| 25 | `LogRedactionTests`, over every event and over the shape of the log's public surface |
+| 26 | `LogRedactionTests`, which also pins the complete field set of a conflict line |
+| 27 | `EmbeddedMetricsPublisherTests`, over the dimension set and over the whole published record |
+| 28 | `EmbeddedMetricsPublisherTests`, across five deliveries and over the shape of `IInvocationMetrics` |
 | 29 | `DynamoDbOrderCommandStoreTests`, both halves — the token is forwarded, and cancellation is neither reclassified nor swallowed when the SDK wraps it |
 | 30 | `OrderWriteRequestTests`, `OrderCommandStoreTests` |
 
