@@ -245,6 +245,13 @@ dotnet_diagnostic.CA1707.severity = warning
 # docs/engineering-standards.md, but a skeleton project has nothing to comment yet.
 dotnet_diagnostic.CS1591.severity = suggestion
 
+[infra/**/*.cs]
+# CA1711 reserves the Stack suffix for types deriving from a stack collection. A CDK stack is what
+# this suffix means to every reader of infrastructure code, and CDK's own documentation, templates
+# and error messages all name types this way. Allowed here rather than repository-wide, so a class
+# called something Stack in the service still has to justify the name.
+dotnet_code_quality.CA1711.allowed_suffixes = Stack
+
 [tests/**/*.cs]
 # Test method names read as sentences, so CA1707 is off here and on everywhere else. Removing this
 # line fails the build on every test in the repository, which is what keeps this section honest.

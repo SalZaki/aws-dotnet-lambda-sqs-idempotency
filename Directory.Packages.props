@@ -13,6 +13,17 @@
     <PackageVersion Include="Amazon.Lambda.Serialization.SystemTextJson" Version="3.0.0" />
   </ItemGroup>
 
+  <!--
+    CDK. Permitted in ReliableOrders.Cdk and ReliableOrders.CdkTests only. Amazon.CDK.Lib carries the
+    assertions module as well as the resource library, so the test project needs no second package.
+    Constructs is a direct reference rather than a transitive one because every construct in this
+    repository derives from it.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="Amazon.CDK.Lib" Version="2.263.0" />
+    <PackageVersion Include="Constructs" Version="10.8.1" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <!--

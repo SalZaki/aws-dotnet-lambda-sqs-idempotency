@@ -47,6 +47,7 @@ The logical name is `OrdersQueue`. Recommended development defaults follow.
 | Setting | Value |
 | --- | --- |
 | Queue type | Standard |
+| Queue name | `reliable-orders-<environment>`, explicit rather than generated (see below) |
 | Encryption | SQS-managed server-side encryption |
 | Message retention | 4 days |
 | Visibility timeout | 210 seconds, computed rather than literal (see below) |
@@ -54,8 +55,17 @@ The logical name is `OrdersQueue`. Recommended development defaults follow.
 | Receive message wait time | 20 seconds |
 | DLQ | `OrdersDeadLetterQueue` |
 | `maxReceiveCount` | 5 |
-| Resource policy | No public or cross-account send access by default |
+| Resource policy | No public or cross-account send access by default; a TLS-only deny statement on both queues |
 | Tags | `Project=ReliableOrdersWorker`, `Environment=<environment>`, `ManagedBy=CDK` |
+
+**Queue names are explicit.** A generated name would be fine for the source queue on its own, and the
+reason it is not is the dead-letter queue's redrive allow policy below. That policy has to name the
+source queue, and naming it by resource reference makes each queue depend on the other, which
+CloudFormation refuses as a circular dependency. With the name fixed, the policy composes the ARN
+from the stack's own partition, Region and account and points at the same queue without referencing
+the resource. The environment suffix is what keeps two environments in one account apart; because
+the names are physical, one account and Region holds one deployment of each environment, and a
+second developer wanting their own stack needs a new environment rather than a second copy of `dev`.
 
 The receive message wait time affects only the publisher CLI and any manual `ReceiveMessage` call.
 The Lambda event source mapping manages its own polling and ignores the queue setting.
@@ -86,9 +96,11 @@ The logical name is `OrdersDeadLetterQueue`.
 | Setting | Value |
 | --- | --- |
 | Queue type | Standard |
+| Queue name | `reliable-orders-<environment>-dlq` |
 | Encryption | Enabled |
 | Message retention | 14 days |
-| Redrive allow policy | Restricted to the intended source queue where supported |
+| Redrive allow policy | `byQueue`, naming the source queue by composed ARN |
+| Removal policy | Retain where `RetainData`, destroy otherwise |
 | CloudWatch alarm | Visible message count greater than zero |
 | Runbook | Inspect, diagnose, repair, redrive, verify |
 
@@ -264,6 +276,11 @@ public int VisibilityTimeoutSeconds =>
 
 The record validates its own invariants on construction. It requires `MaxConcurrency <=
 ReservedConcurrency`, `DlqRetentionDays > SourceRetentionDays`, and `MaxReceiveCount >= 5`.
+
+Which configuration a synthesis uses comes from the `environment` CDK context key, defaulted in
+`cdk.json` and overridable with `cdk deploy -c environment=<name>`. An unknown name fails synthesis
+naming the environments that exist, rather than falling back to the development sizing — deploying
+development retention into a production account is not a failure anyone notices on the day.
 
 ### CDK outputs
 

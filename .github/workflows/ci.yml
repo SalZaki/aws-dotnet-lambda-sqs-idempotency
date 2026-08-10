@@ -38,6 +38,16 @@ jobs:
         with:
           global-json-file: global.json
 
+      # The CDK is a TypeScript library reached through jsii, which starts a
+      # node process for every construct the tests build. ubuntu-latest happens
+      # to preinstall node, so leaving this out passes until the runner image
+      # changes and then fails as an opaque jsii startup error rather than as a
+      # missing dependency.
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
       # Locked mode fails when the resolved graph differs from the committed
       # packages.lock.json, so CI restores the graph that was reviewed rather
       # than whatever resolves today.
