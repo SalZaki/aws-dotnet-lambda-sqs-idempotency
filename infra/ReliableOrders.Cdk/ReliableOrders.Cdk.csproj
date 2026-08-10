@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ReliableOrders.Cdk</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <Description>
+      The AWS CDK application. One stack per environment, divided into constructs that each own a
+      group of resources.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Amazon.CDK.Lib" />
+    <PackageReference Include="Constructs" />
+  </ItemGroup>
+
+</Project>

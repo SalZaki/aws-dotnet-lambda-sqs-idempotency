@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ReliableOrders.CdkTests</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\infra\ReliableOrders.Cdk\ReliableOrders.Cdk.csproj" />
+  </ItemGroup>
+
+  <!--
+    The tests synthesise with the deployed context rather than an empty one. Feature flags change what
+    a construct emits, and the CLI reads them from this file while a bare App in a test does not, so
+    without it the suite asserts a template no deployment produces. Copied rather than duplicated, so
+    the two cannot drift.
+  -->
+  <ItemGroup>
+    <None Include="..\..\infra\ReliableOrders.Cdk\cdk.json"
+          Link="cdk.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    Amazon.CDK.Lib arrives through the project reference and carries the assertions module with it. It
+    is named here as well because these tests compile against Amazon.CDK.Assertions directly, and a
+    project that uses a package should say so rather than rely on what a reference happens to bring.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Amazon.CDK.Lib" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>

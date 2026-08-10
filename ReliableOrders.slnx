@@ -7,6 +7,9 @@
     <File Path="global.json" />
     <File Path="tests/Directory.Build.props" />
   </Folder>
+  <Folder Name="/infra/">
+    <Project Path="infra/ReliableOrders.Cdk/ReliableOrders.Cdk.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/ReliableOrders.Aws/ReliableOrders.Aws.csproj" />
     <Project Path="src/ReliableOrders.Core/ReliableOrders.Core.csproj" />
@@ -15,6 +18,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ReliableOrders.ArchitectureTests/ReliableOrders.ArchitectureTests.csproj" />
+    <Project Path="tests/ReliableOrders.CdkTests/ReliableOrders.CdkTests.csproj" />
     <Project Path="tests/ReliableOrders.IntegrationTests/ReliableOrders.IntegrationTests.csproj" />
     <Project Path="tests/ReliableOrders.UnitTests/ReliableOrders.UnitTests.csproj" />
   </Folder>
