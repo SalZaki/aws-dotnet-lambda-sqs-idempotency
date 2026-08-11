@@ -139,6 +139,12 @@ transaction cancellation semantics, or service-specific edge cases.
 
 Use CDK assertions rather than relying only on a full-template snapshot.
 
+The suite runs serially. Every CDK call crosses into one node process through jsii, and two test
+classes synthesising at once return each other's results — a suite where every class passes alone
+fails in bulk when they run together, and then hangs. Test parallelisation is disabled for the
+assembly rather than per class, because the constraint belongs to the runtime and applies to whatever
+is added next.
+
 ### Verify
 
 - Lambda uses the configured .NET 10 managed runtime.

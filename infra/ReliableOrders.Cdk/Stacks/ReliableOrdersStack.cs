@@ -9,9 +9,8 @@ namespace ReliableOrders.Cdk.Stacks;
 /// One stack per environment, divided into constructs that each own a group of resources.
 /// </summary>
 /// <remarks>
-/// Messaging is all that is here. Persistence, the function and its event source mapping, and the
-/// dashboard and alarms each arrive as their own construct, so this stack composes rather than
-/// declares.
+/// Messaging and persistence are here. The function with its event source mapping, and the dashboard
+/// with its alarms, each arrive as their own construct, so this stack composes rather than declares.
 /// </remarks>
 public sealed class ReliableOrdersStack : Stack
 {
@@ -46,6 +45,7 @@ public sealed class ReliableOrdersStack : Stack
         tags.Add("ManagedBy", ManagedByTagValue);
 
         var messaging = new MessagingConstruct(this, "Messaging", config);
+        var persistence = new PersistenceConstruct(this, "Persistence", config);
 
         // Both URLs are output because both are operational inputs. The publisher sends to one, and
         // the redrive runbook opens with the other.
@@ -59,6 +59,20 @@ public sealed class ReliableOrdersStack : Stack
         {
             Value = messaging.DeadLetterQueue.QueueUrl,
             Description = "The queue holding messages that exhausted their receives.",
+        });
+
+        // The tables are not named in source, so these outputs are the only way to find them. Story
+        // 4.3 reads the same values into the function's environment.
+        _ = new CfnOutput(this, "OrdersTableName", new CfnOutputProps
+        {
+            Value = persistence.Orders.TableName,
+            Description = "The table holding one row per order.",
+        });
+
+        _ = new CfnOutput(this, "IdempotencyRecordsTableName", new CfnOutputProps
+        {
+            Value = persistence.IdempotencyRecords.TableName,
+            Description = "The table holding one row per event.",
         });
     }
 }
