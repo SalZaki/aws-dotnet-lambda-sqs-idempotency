@@ -17,8 +17,9 @@ namespace ReliableOrders.CdkTests;
 /// properties that matter most here — the redrive policies — are only assembled during synthesis.
 /// </para>
 /// <para>
-/// Resources are found by queue name, and a logical ID is only ever compared against one discovered
-/// the same way. A test that pinned a logical ID would fail on a refactor that deployed identically.
+/// Resources are found by what they are — a queue's name, a table's partition key, the only policy of
+/// its type — and a logical ID is only ever compared against one discovered the same way. A test that
+/// pinned a logical ID would fail on a refactor that deployed identically.
 /// </para>
 /// </remarks>
 internal static class SynthesizedStack
@@ -28,6 +29,12 @@ internal static class SynthesizedStack
 
     /// <summary>The type a queue's resource policy is declared as, separately from the queue.</summary>
     public const string QueuePolicyResourceType = "AWS::SQS::QueuePolicy";
+
+    /// <summary>The CloudFormation type both tables are declared as.</summary>
+    public const string TableResourceType = "AWS::DynamoDB::Table";
+
+    /// <summary>The type an identity policy is declared as.</summary>
+    public const string IamPolicyResourceType = "AWS::IAM::Policy";
 
     /// <summary>
     /// Synthesises a stack built from the given configuration.
@@ -40,17 +47,25 @@ internal static class SynthesizedStack
     {
         ArgumentNullException.ThrowIfNull(config);
 
-        var app = new App(new AppProps { Context = DeployedContext() });
-
         return Template.FromStack(new ReliableOrdersStack(
-            app,
+            NewApp(),
             $"ReliableOrders-{config.EnvironmentName}",
             config,
-            new StackProps
-            {
-                Env = new Amazon.CDK.Environment { Account = "111122223333", Region = "eu-west-2" },
-            }));
+            new StackProps { Env = TestEnvironment }));
     }
+
+    /// <summary>
+    /// An application carrying the same context a deployment would.
+    /// </summary>
+    /// <remarks>
+    /// For the cases that need a stack of their own, such as a grant that has to be made to a
+    /// principal the real stack does not create yet.
+    /// </remarks>
+    public static App NewApp() => new(new AppProps { Context = DeployedContext() });
+
+    /// <summary>The account and Region every synthesised stack here is bound to.</summary>
+    public static Amazon.CDK.Environment TestEnvironment { get; } =
+        new() { Account = "111122223333", Region = "eu-west-2" };
 
     /// <summary>
     /// Reads the context the CDK CLI would supply, which is where the feature flags live.
@@ -93,7 +108,7 @@ internal static class SynthesizedStack
     /// Returns the queue with the given name.
     /// </summary>
     /// <exception cref="InvalidOperationException">No queue in the template carries that name.</exception>
-    public static SynthesizedQueue Queue(this Template template, string queueName)
+    public static SynthesizedResource Queue(this Template template, string queueName)
     {
         ArgumentNullException.ThrowIfNull(template);
 
@@ -103,13 +118,13 @@ internal static class SynthesizedStack
         {
             var properties = resource.TryGetValue("Properties", out var declared)
                 ? Object(declared, logicalId)
-                : throw new InvalidOperationException($"Queue '{logicalId}' declares no properties.");
+                : throw new InvalidOperationException($"Resource '{logicalId}' declares no properties.");
 
             if (properties.TryGetValue("QueueName", out var value) && value is string name)
             {
                 if (string.Equals(name, queueName, StringComparison.Ordinal))
                 {
-                    return new SynthesizedQueue(logicalId, properties, resource);
+                    return new SynthesizedResource(logicalId, properties, resource);
                 }
 
                 found.Add(name);
@@ -122,6 +137,99 @@ internal static class SynthesizedStack
     }
 
     /// <summary>
+    /// Returns the table whose partition key has the given name.
+    /// </summary>
+    /// <remarks>
+    /// The tables carry no physical name, so their key is what identifies them. It is also what the
+    /// runtime writes against, which a generated logical ID is not.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">No table in the template is keyed on that attribute.</exception>
+    public static SynthesizedResource TableKeyedOn(this Template template, string partitionKeyName)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+
+        var found = new List<string>();
+
+        foreach (var (logicalId, resource) in template.FindResources(TableResourceType))
+        {
+            var properties = resource.TryGetValue("Properties", out var declared)
+                ? Object(declared, logicalId)
+                : throw new InvalidOperationException($"Resource '{logicalId}' declares no properties.");
+
+            var key = PartitionKeyOf(properties, logicalId);
+
+            if (string.Equals(key, partitionKeyName, StringComparison.Ordinal))
+            {
+                return new SynthesizedResource(logicalId, properties, resource);
+            }
+
+            found.Add(key);
+        }
+
+        throw new InvalidOperationException(
+            $"No table keyed on '{partitionKeyName}' in the template. Found: "
+            + $"{(found.Count == 0 ? "none" : string.Join(", ", found))}.");
+    }
+
+    /// <summary>
+    /// Returns the only resource of a type, and fails when the template holds more or none.
+    /// </summary>
+    /// <remarks>
+    /// Used where the count is part of the claim. A second IAM policy would mean a second grant, which
+    /// a case asserting on "the" policy would otherwise read straight past.
+    /// </remarks>
+    public static SynthesizedResource OnlyResource(this Template template, string resourceType)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+
+        var resources = template.FindResources(resourceType);
+
+        if (resources.Count != 1)
+        {
+            throw new InvalidOperationException(
+                $"Expected exactly one {resourceType} in the template, and found {resources.Count}.");
+        }
+
+        var (logicalId, resource) = resources.Single();
+
+        return resource.TryGetValue("Properties", out var declared)
+            ? new SynthesizedResource(logicalId, Object(declared, logicalId), resource)
+            : throw new InvalidOperationException($"Resource '{logicalId}' declares no properties.");
+    }
+
+    /// <summary>
+    /// Returns a table's partition key, or a description of why it has none.
+    /// </summary>
+    /// <remarks>
+    /// It reports rather than throws so that one malformed table cannot fail the lookup of a different,
+    /// well-formed one. What the caller does with the answer is decide whether it matched; what it puts
+    /// in the failure message is this string, which is more use than "not found".
+    /// </remarks>
+    private static string PartitionKeyOf(IDictionary<string, object> properties, string logicalId)
+    {
+        if (!properties.TryGetValue("KeySchema", out var schema) || schema is not IEnumerable<object> keys)
+        {
+            return $"<'{logicalId}' declares no key schema>";
+        }
+
+        foreach (var entry in keys)
+        {
+            if (entry is not IDictionary<string, object> key)
+            {
+                continue;
+            }
+
+            if (key.TryGetValue("KeyType", out var type) && type as string == "HASH"
+                && key.TryGetValue("AttributeName", out var name) && name is string attribute)
+            {
+                return attribute;
+            }
+        }
+
+        return $"<'{logicalId}' declares no partition key>";
+    }
+
+    /// <summary>
     /// Returns the resource policy attached to a queue, rendered back to JSON.
     /// </summary>
     /// <remarks>
@@ -130,7 +238,7 @@ internal static class SynthesizedStack
     /// the shape of a document CDK assembles.
     /// </remarks>
     /// <exception cref="InvalidOperationException">No policy in the template names that queue.</exception>
-    public static string PolicyFor(this Template template, SynthesizedQueue queue)
+    public static string PolicyFor(this Template template, SynthesizedResource queue)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(queue);
@@ -172,27 +280,27 @@ internal static class SynthesizedStack
 }
 
 /// <summary>
-/// One queue as the synthesised template declares it.
+/// One resource as the synthesised template declares it.
 /// </summary>
 /// <param name="LogicalId">What other resources reference it by.</param>
 /// <param name="Properties">The resource's CloudFormation properties.</param>
 /// <param name="Resource">The whole resource, which carries the policies CloudFormation keeps outside the properties.</param>
-internal sealed record SynthesizedQueue(
+internal sealed record SynthesizedResource(
     string LogicalId,
     IDictionary<string, object> Properties,
     IDictionary<string, object> Resource)
 {
     /// <summary>
-    /// What CloudFormation does with the queue when the stack no longer declares it.
+    /// What CloudFormation does with the resource when the stack no longer declares it.
     /// </summary>
     /// <remarks>
     /// A resource attribute rather than a property, so reading it off the properties would report it
-    /// as absent on a queue that has one.
+    /// as absent on a resource that has one.
     /// </remarks>
     public string DeletionPolicy =>
         Resource.TryGetValue("DeletionPolicy", out var value) && value is string policy
             ? policy
-            : throw new InvalidOperationException($"Queue '{LogicalId}' declares no deletion policy.");
+            : throw new InvalidOperationException($"Resource '{LogicalId}' declares no deletion policy.");
 
     /// <summary>
     /// Reads a numeric property, which the template carries as a JSON number.
@@ -200,7 +308,7 @@ internal sealed record SynthesizedQueue(
     public int Number(string name) =>
         Properties.TryGetValue(name, out var value)
             ? Convert.ToInt32(value, CultureInfo.InvariantCulture)
-            : throw new InvalidOperationException($"Queue '{LogicalId}' has no '{name}' property.");
+            : throw new InvalidOperationException($"Resource '{LogicalId}' has no '{name}' property.");
 
     /// <summary>
     /// Reads a boolean property.
@@ -208,7 +316,7 @@ internal sealed record SynthesizedQueue(
     public bool Flag(string name) =>
         Properties.TryGetValue(name, out var value)
             ? Convert.ToBoolean(value, CultureInfo.InvariantCulture)
-            : throw new InvalidOperationException($"Queue '{LogicalId}' has no '{name}' property.");
+            : throw new InvalidOperationException($"Resource '{LogicalId}' has no '{name}' property.");
 
     /// <summary>
     /// Renders one property back to JSON.
@@ -222,23 +330,41 @@ internal sealed record SynthesizedQueue(
     public string Json(string name) =>
         Properties.TryGetValue(name, out var value)
             ? JsonSerializer.Serialize(value)
-            : throw new InvalidOperationException($"Queue '{LogicalId}' has no '{name}' property.");
+            : throw new InvalidOperationException($"Resource '{LogicalId}' has no '{name}' property.");
 
     /// <summary>
-    /// Returns the queue's tags as the key-value pairs the template declares.
+    /// Reads a property the template carries as a list of objects.
+    /// </summary>
+    /// <remarks>
+    /// For asserting on a list's length as well as its contents. Comparing the rendered JSON of one of
+    /// these would also pin the order the properties inside it were written in, which the template is
+    /// free to vary and does.
+    /// </remarks>
+    public IReadOnlyList<IDictionary<string, object>> Items(string name)
+    {
+        if (!Properties.TryGetValue(name, out var value) || value is not IEnumerable<object> entries)
+        {
+            throw new InvalidOperationException($"Resource '{LogicalId}' has no '{name}' list.");
+        }
+
+        return [.. entries.Select(entry => SynthesizedStack.Object(entry, $"an entry of '{name}' on '{LogicalId}'"))];
+    }
+
+    /// <summary>
+    /// Returns the resource's tags as the key-value pairs the template declares.
     /// </summary>
     public IReadOnlyDictionary<string, string> Tags()
     {
         if (!Properties.TryGetValue("Tags", out var value) || value is not IEnumerable<object> entries)
         {
-            throw new InvalidOperationException($"Queue '{LogicalId}' carries no tags.");
+            throw new InvalidOperationException($"Resource '{LogicalId}' carries no tags.");
         }
 
         var tags = new Dictionary<string, string>(StringComparer.Ordinal);
 
         foreach (var entry in entries)
         {
-            var tag = SynthesizedStack.Object(entry, $"a tag on queue '{LogicalId}'");
+            var tag = SynthesizedStack.Object(entry, $"a tag on resource '{LogicalId}'");
             tags[(string)tag["Key"]] = (string)tag["Value"];
         }
 
