@@ -1,4 +1,5 @@
 using Amazon.CDK;
+using Amazon.CDK.AWS.Lambda;
 using Constructs;
 using ReliableOrders.Cdk.Configuration;
 using ReliableOrders.Cdk.Constructs;
@@ -26,11 +27,18 @@ public sealed class ReliableOrdersStack : Stack
     /// <param name="scope">The CDK application.</param>
     /// <param name="id">The stack name.</param>
     /// <param name="config">The environment's sizing, retention and runtime values.</param>
+    /// <param name="code">The published function, as an asset.</param>
     /// <param name="props">Account, Region and stack-level settings.</param>
-    public ReliableOrdersStack(Construct scope, string id, EnvironmentConfig config, IStackProps? props = null)
+    public ReliableOrdersStack(
+        Construct scope,
+        string id,
+        EnvironmentConfig config,
+        Code code,
+        IStackProps? props = null)
         : base(scope, id, props)
     {
         ArgumentNullException.ThrowIfNull(config);
+        ArgumentNullException.ThrowIfNull(code);
 
         // Tagged on the stack rather than on each construct, so a resource added by a later story
         // carries the tags without anyone remembering to add them. ManagedBy tells an operator that
@@ -46,6 +54,7 @@ public sealed class ReliableOrdersStack : Stack
 
         var messaging = new MessagingConstruct(this, "Messaging", config);
         var persistence = new PersistenceConstruct(this, "Persistence", config);
+        var processor = new OrderProcessorConstruct(this, "Processor", config, code, messaging, persistence);
 
         // Both URLs are output because both are operational inputs. The publisher sends to one, and
         // the redrive runbook opens with the other.
@@ -73,6 +82,12 @@ public sealed class ReliableOrdersStack : Stack
         {
             Value = persistence.IdempotencyRecords.TableName,
             Description = "The table holding one row per event.",
+        });
+
+        _ = new CfnOutput(this, "OrderProcessorFunctionName", new CfnOutputProps
+        {
+            Value = processor.Function.FunctionName,
+            Description = "The function the event source invokes.",
         });
     }
 }

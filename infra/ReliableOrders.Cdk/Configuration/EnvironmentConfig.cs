@@ -35,6 +35,28 @@ public sealed record EnvironmentConfig
     private const int MinimumReceiveCount = 5;
 
     /// <summary>
+    /// The largest batch SQS delivers when the event source does not wait to fill one.
+    /// </summary>
+    private const int MaximumUnbatchedSize = 10;
+
+    /// <summary>
+    /// The largest batch SQS delivers when it does.
+    /// </summary>
+    private const int MaximumBatchedSize = 10_000;
+
+    /// <summary>The longest SQS will wait to fill a batch.</summary>
+    private const int MaximumBatchWindowSeconds = 300;
+
+    /// <summary>
+    /// The narrowest event-source concurrency SQS accepts. One is not "serialise the consumer", it is
+    /// rejected.
+    /// </summary>
+    private const int MinimumEventSourceConcurrency = 2;
+
+    /// <summary>The widest it accepts.</summary>
+    private const int MaximumEventSourceConcurrency = 1_000;
+
+    /// <summary>
     /// Builds a configuration, checking each value and the relationships between them. The properties
     /// below document the parameters they take their names from.
     /// </summary>
@@ -89,6 +111,39 @@ public sealed record EnvironmentConfig
                 + $"{sourceRetentionDays} days. A message that spent the whole source retention failing "
                 + "needs longer than that to be diagnosed.",
                 nameof(dlqRetentionDays));
+        }
+
+        // The bounds SQS puts on the event source, checked here for the same reason as the rest. Left
+        // to the deployment, each of these surfaces as a jsii error from inside SqsEventSource naming
+        // a property rather than the configured value that produced it.
+        if (batchWindowSeconds > MaximumBatchWindowSeconds)
+        {
+            throw new ArgumentException(
+                $"Batch window {batchWindowSeconds} seconds exceeds the maximum of "
+                + $"{MaximumBatchWindowSeconds}.",
+                nameof(batchWindowSeconds));
+        }
+
+        if (maxConcurrency is < MinimumEventSourceConcurrency or > MaximumEventSourceConcurrency)
+        {
+            throw new ArgumentException(
+                $"Maximum concurrency {maxConcurrency} is outside the {MinimumEventSourceConcurrency} "
+                + $"to {MaximumEventSourceConcurrency} the event source accepts.",
+                nameof(maxConcurrency));
+        }
+
+        // SQS ties the two together, and CDK stops checking the ceiling as soon as a batching window
+        // is defined — including one of zero seconds, which is the case that reads as no window at all.
+        // Left to CloudFormation, an oversized batch is rejected at deploy, which is the class of
+        // failure this record exists to move forward to construction.
+        var maximumBatchSize = batchWindowSeconds == 0 ? MaximumUnbatchedSize : MaximumBatchedSize;
+
+        if (batchSize > maximumBatchSize)
+        {
+            throw new ArgumentException(
+                $"Batch size {batchSize} exceeds the maximum of {maximumBatchSize} for a batching "
+                + $"window of {batchWindowSeconds} seconds.",
+                nameof(batchSize));
         }
 
         if (maxReceiveCount < MinimumReceiveCount)

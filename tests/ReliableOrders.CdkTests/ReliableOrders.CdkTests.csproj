@@ -7,6 +7,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\infra\ReliableOrders.Cdk\ReliableOrders.Cdk.csproj" />
+    <!--
+      For FunctionConfiguration's variable names. The environment the stack sets and the environment
+      the function reads are one contract, and asserting it against the constants rather than against
+      string literals means a rename fails this build instead of the first invocation after a deploy.
+      A test-only reference: the CDK app itself does not depend on the function it deploys.
+    -->
+    <ProjectReference Include="..\..\src\ReliableOrders.Function\ReliableOrders.Function.csproj" />
   </ItemGroup>
 
   <!--
