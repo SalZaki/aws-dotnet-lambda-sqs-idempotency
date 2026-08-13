@@ -58,9 +58,9 @@ The logical name is `OrdersQueue`. Recommended development defaults follow.
 | Resource policy | No public or cross-account send access by default; a TLS-only deny statement on both queues |
 | Tags | `Project=ReliableOrdersWorker`, `Environment=<environment>`, `ManagedBy=CDK` |
 
-**Queue names are explicit.** A generated name would be fine for the source queue on its own, and the
-reason it is not is the dead-letter queue's redrive allow policy below. That policy has to name the
-source queue, and naming it by resource reference makes each queue depend on the other, which
+**Queue names are explicit.** A generated name would be fine for the source queue on its own, and
+the reason it is not is the dead-letter queue's redrive allow policy below. That policy has to name
+the source queue, and naming it by resource reference makes each queue depend on the other, which
 CloudFormation refuses as a circular dependency. With the name fixed, the policy composes the ARN
 from the stack's own partition, Region and account and points at the same queue without referencing
 the resource. The environment suffix is what keeps two environments in one account apart; because
@@ -114,14 +114,14 @@ The logical name is `OrderProcessorFunction`. Initial configuration follows.
 | --- | --- |
 | Runtime | Managed .NET 10, identifier supplied by `EnvironmentConfig` |
 | Package | ZIP |
-| Architecture | Configurable, benchmark ARM64 against x86_64 |
+| Architecture | x86_64, the CDK default. Not yet configurable, and benchmarking ARM64 against it is Story 9.3 |
 | Memory | 512 MB initially |
 | Timeout | 30 seconds |
 | Ephemeral storage | Default unless benchmark data justifies more |
 | Reserved concurrency | Configurable, 10 in development |
 | Tracing | OpenTelemetry only, X-Ray active tracing **disabled** |
-| Log format | JSON |
-| Log retention | Explicitly configured |
+| Log format | Text, because the function writes its own JSON (see below) |
+| Log retention | 30 days, on a log group the stack declares |
 | VPC | None unless a real private-network dependency is introduced |
 | Execution role | Least privilege |
 
@@ -139,12 +139,40 @@ MAX_EVENT_SKEW_FUTURE_HOURS
 MAX_EVENT_SKEW_PAST_DAYS
 ```
 
+The stack sets the five required variables and `IDEMPOTENCY_RETENTION_DAYS`, and deliberately leaves
+the rest unset. Restating an optional default in the deployment puts a second copy of it where it
+outranks the one the code argues for, and the two then drift.
+
 `ORDERS_TABLE_NAME`, `IDEMPOTENCY_TABLE_NAME`, `POWERTOOLS_SERVICE_NAME`, `ENVIRONMENT` and
 `METRICS_NAMESPACE` are required and have no defaults: nothing sensible can be assumed for a table
 name, and a defaulted service or environment mislabels every metric in the account. The rest are
 optional and fall back to the values their types already carry. A value that is set but unusable
 fails the cold start naming the variable rather than falling back, because defaulting over it would
 run the service on a number nobody chose while the deployment that set it appeared to take effect.
+
+The log format is Lambda's `Text`, not `JSON`, and that is deliberate. The function writes
+structured JSON itself and writes EMF metric records on the same stream. Lambda's JSON format wraps
+each stdout line in an envelope of its own, which puts the EMF record's `_aws` key below the root —
+CloudWatch extracts metrics only from `_aws` at the root, so every custom metric would stop being
+published while the log line carrying it still looked correct.
+
+### Deployment Package
+
+The CDK does not build the function. Synthesis packages whatever
+`src/ReliableOrders.Function/bin/Release/net10.0/publish` holds, so `dotnet publish
+src/ReliableOrders.Function -c Release` has to run first, and the pipeline that deploys already
+builds and tests the solution — publishing again during synthesis would deploy a second binary
+that nothing tested.
+
+A publish directory that is missing, or that holds no `ReliableOrders.Function.dll`, fails
+synthesis naming the command — CDK would otherwise zip whatever is there and deploy a function
+the runtime can find no handler in. The framework in the path is read from the CDK assembly
+rather than written down, so a target-framework bump cannot leave synthesis pointing at the
+previous framework's directory, which still holds the last build.
+
+Every CDK CLI command synthesises, so `cdk destroy`, `cdk diff` and `cdk ls` need the publish output
+too. On a checkout that has not built, run the publish first or point the CLI at an existing cloud
+assembly with `cdk destroy --app cdk.out`.
 
 ### Event Source Mapping
 

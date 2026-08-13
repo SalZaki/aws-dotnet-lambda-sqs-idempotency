@@ -16,6 +16,7 @@ _ = new ReliableOrdersStack(
     app,
     $"ReliableOrders-{config.EnvironmentName}",
     config,
+    FunctionAsset.FromPublishOutput(RepositoryRoot()),
     new StackProps
     {
         Description = $"Reliable orders worker, {config.EnvironmentName} environment.",
@@ -43,6 +44,30 @@ static string EnvironmentName(App app)
             $"The environment context key is set to '{value}', which is not a name. "
             + "Pass it as -c environment=<name>."),
     };
+}
+
+// The publish output is found relative to the repository, so the repository has to be found first.
+// Walking up for the solution file rather than counting directories up from here, because the number
+// is only right when the CLI is run from the directory holding cdk.json — cdk -a, or dotnet run
+// --project from the root, would resolve somewhere outside the checkout and report a path nobody
+// recognises.
+static string RepositoryRoot()
+{
+    const string marker = "ReliableOrders.slnx";
+
+    var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+
+    for (; directory is not null; directory = directory.Parent)
+    {
+        if (File.Exists(Path.Combine(directory.FullName, marker)))
+        {
+            return directory.FullName;
+        }
+    }
+
+    throw new InvalidOperationException(
+        $"No {marker} in '{Directory.GetCurrentDirectory()}' or any directory above it, so the "
+        + "repository root cannot be found. Run this from inside the checkout.");
 }
 
 static string Required(string variable) =>

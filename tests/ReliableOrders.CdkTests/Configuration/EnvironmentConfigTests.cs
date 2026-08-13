@@ -1,3 +1,4 @@
+using System.Globalization;
 using ReliableOrders.Cdk.Configuration;
 
 namespace ReliableOrders.CdkTests.Configuration;
@@ -85,6 +86,60 @@ public sealed class EnvironmentConfigTests
     }
 
     /// <summary>
+    /// A batch larger than SQS delivers without a batching window is rejected.
+    /// </summary>
+    /// <remarks>
+    /// CDK stops checking the ceiling as soon as a window is defined, and a window of zero seconds is
+    /// defined — so the oversized batch synthesises and CloudFormation rejects it at deploy. Ten is
+    /// accepted at zero, and the same batch is accepted once there is a window to fill it.
+    /// </remarks>
+    [Fact]
+    public void A_batch_larger_than_ten_is_rejected_without_a_batching_window()
+    {
+        var exception = Assert.Throws<ArgumentException>(
+            () => Config(batchSize: 11, batchWindowSeconds: 0));
+
+        Assert.Contains("11", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("10", exception.Message, StringComparison.Ordinal);
+
+        Assert.Equal(10, Config(batchSize: 10, batchWindowSeconds: 0).BatchSize);
+        Assert.Equal(11, Config(batchSize: 11, batchWindowSeconds: 1).BatchSize);
+    }
+
+    /// <summary>
+    /// The bounds SQS puts on the event source are refused here rather than at deploy.
+    /// </summary>
+    /// <remarks>
+    /// A maximum concurrency of one is the one worth naming. It reads as "serialise the consumer" and
+    /// is illegal, so the deployment that meant to slow the service down is the one that fails.
+    /// </remarks>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(1001)]
+    public void An_event_source_concurrency_outside_the_accepted_range_is_rejected(int maxConcurrency)
+    {
+        var exception = Assert.Throws<ArgumentException>(
+            () => Config(maxConcurrency: maxConcurrency, reservedConcurrency: 2000));
+
+        Assert.Contains(
+            maxConcurrency.ToString(CultureInfo.InvariantCulture),
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A batching window longer than SQS waits is refused.
+    /// </summary>
+    [Fact]
+    public void A_batching_window_longer_than_five_minutes_is_rejected()
+    {
+        var exception = Assert.Throws<ArgumentException>(() => Config(batchWindowSeconds: 301));
+
+        Assert.Contains("301", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("300", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The context value is resolved to a configuration.
     /// </summary>
     [Theory]
@@ -112,6 +167,7 @@ public sealed class EnvironmentConfigTests
     /// about.
     /// </summary>
     private static EnvironmentConfig Config(
+        int batchSize = 10,
         int lambdaTimeoutSeconds = 30,
         int reservedConcurrency = 10,
         int batchWindowSeconds = 1,
@@ -126,7 +182,7 @@ public sealed class EnvironmentConfigTests
             lambdaMemoryMb: 512,
             lambdaTimeoutSeconds: lambdaTimeoutSeconds,
             reservedConcurrency: reservedConcurrency,
-            batchSize: 10,
+            batchSize: batchSize,
             batchWindowSeconds: batchWindowSeconds,
             maxConcurrency: maxConcurrency,
             visibilityMarginSeconds: visibilityMarginSeconds,

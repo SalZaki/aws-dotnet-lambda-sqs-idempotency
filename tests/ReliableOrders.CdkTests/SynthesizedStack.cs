@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Amazon.CDK;
 using Amazon.CDK.Assertions;
+using Amazon.CDK.AWS.Lambda;
 using ReliableOrders.Cdk.Configuration;
 using ReliableOrders.Cdk.Stacks;
 
@@ -51,7 +52,36 @@ internal static class SynthesizedStack
             NewApp(),
             $"ReliableOrders-{config.EnvironmentName}",
             config,
+            FunctionCode(),
             new StackProps { Env = TestEnvironment }));
+    }
+
+    /// <summary>
+    /// A stand-in for the published function, new on every call.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What the asset contains does not reach any assertion here — the template records a hash and an
+    /// S3 key, not the code. Publishing the real function before every test run would add a build step
+    /// to the suite to package bytes nothing reads. That the deployed asset is the real publish output
+    /// is <c>FunctionAsset</c>'s job, and it has its own cases.
+    /// </para>
+    /// <para>
+    /// A method rather than a property holding one instance. A <see cref="Code"/> binds to the first
+    /// stack it is added to and refuses the second, so a shared instance fails every case after the
+    /// first — and fails them inside the stack under test, which reads as the construct being broken.
+    /// </para>
+    /// </remarks>
+    public static Code FunctionCode() => Code.FromAsset(StubAsset());
+
+    private static string StubAsset()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "function-asset-stub");
+
+        Directory.CreateDirectory(path);
+        File.WriteAllText(Path.Combine(path, "placeholder.txt"), "Stands in for the published function.");
+
+        return path;
     }
 
     /// <summary>
