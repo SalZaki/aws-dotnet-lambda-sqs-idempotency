@@ -64,13 +64,30 @@ control. Payload versioning. Correlation and causation. Transactional outbox as 
 
 ## Getting started
 
-The only prerequisite so far is the .NET SDK pinned in [`global.json`](global.json).
+The .NET SDK pinned in [`global.json`](global.json) is enough to build and to run the tests that
+matter most.
 
 ```bash
 dotnet restore ReliableOrders.slnx
 dotnet build ReliableOrders.slnx -c Release
+dotnet test ReliableOrders.slnx -c Release --filter "Category!=Integration"
+```
+
+Two more are needed for the whole suite. **Node.js**, because every CDK test synthesises through
+jsii, which runs `node` as a child process — without it those tests fail on a missing executable
+rather than on anything they assert. **Docker**, for the container-backed integration tests, which
+carry the `Integration` category and are excluded by the filter above.
+
+```bash
 dotnet test ReliableOrders.slnx -c Release
 ```
+
+The SQS tests need one thing further: LocalStack requires an auth token, free for non-commercial
+use, in `LOCALSTACK_AUTH_TOKEN`. Without one they skip with a reason rather than fail, so the command
+above is safe to run on a machine that has never been set up for them. Behind a TLS-inspecting
+corporate proxy they need `LOCALSTACK_CA_BUNDLE` as well. Both are explained in [SQS
+Emulation](docs/testing-strategy.md#sqs-emulation), along with why DynamoDB deliberately uses a
+different emulator.
 
 Formatting is verified by the build rather than by a separate step, so a layout violation is a build
 error. Fix one with `dotnet format ReliableOrders.slnx`.

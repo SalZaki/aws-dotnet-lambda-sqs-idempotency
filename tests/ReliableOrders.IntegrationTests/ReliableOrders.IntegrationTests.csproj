@@ -11,12 +11,17 @@
   </ItemGroup>
 
   <!--
-    AWSSDK.DynamoDBv2 is a direct reference here, not a transitive one through an adapter project.
-    These tests exercise the real client against a real container, so they need the SDK whether or not
-    ReliableOrders.Aws happens to reference it today.
+    Every AWS package here is a direct reference, not a transitive one through an adapter project.
+    These tests exercise the real clients against real containers, so they need the SDK whether or not
+    ReliableOrders.Aws happens to reference it today. AWSSDK.SQS is referenced by nothing in src at
+    all — see the note on its version in Directory.Packages.props.
   -->
   <ItemGroup>
     <PackageReference Include="AWSSDK.DynamoDBv2" />
+    <PackageReference Include="AWSSDK.SQS" />
+    <PackageReference Include="Amazon.Lambda.SQSEvents" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Testcontainers" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
