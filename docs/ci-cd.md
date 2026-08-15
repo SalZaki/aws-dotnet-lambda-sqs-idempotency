@@ -13,20 +13,64 @@ The workflow file is `.github/workflows/ci.yml`.
 3. Restore using locked dependencies.
 4. Verify formatting.
 5. Build in Release mode.
-6. Run unit tests.
-7. Run integration tests.
-8. Collect test results and coverage.
-9. Run architecture tests.
-10. Publish the function with `dotnet publish src/ReliableOrders.Function -c Release`.
-11. Run `cdk synth`.
-12. Run CDK assertion tests.
-13. Run security and dependency checks.
-14. Upload test and coverage artifacts.
-15. Never assume a privileged AWS deployment role from an untrusted fork.
+6. Run every test that needs no container, as `--filter "Category!=Integration"`.
+7. Collect test results and coverage.
+8. Run architecture tests.
+9. Publish the function with `dotnet publish src/ReliableOrders.Function -c Release`.
+10. Run `cdk synth`.
+11. Run CDK assertion tests.
+12. Run security and dependency checks.
+13. Upload test and coverage artifacts.
+14. Never assume a privileged AWS deployment role from an untrusted fork.
 
-Synthesis packages the publish output rather than building it, so step 10 is not optional — without
+Container-backed tests are **not** in this gate. They pull large images and start containers, which
+is minutes against a gate that otherwise finishes in well under one, and they run in the workflow
+below instead. The filter is written as an exclusion rather than an inclusion so that a new test
+project nobody remembers to wire up still runs here, which is the safe direction to be wrong in.
+
+Synthesis packages the publish output rather than building it, so step 9 is not optional — without
 it `cdk synth` fails naming the command. See [Deployment
 Package](infrastructure.md#deployment-package).
+
+## Integration Tests
+
+The workflow file is `.github/workflows/integration.yml`. It runs on pull requests, on pushes to
+`main`, and on demand.
+
+### Steps
+
+1. Checkout.
+2. Install the pinned .NET SDK from `global.json`.
+3. Restore using locked dependencies, and build in Release mode.
+4. Pull `amazon/dynamodb-local` at its pinned digest.
+5. Pull `localstack/localstack` at its pinned digest, only when an auth token is available.
+6. Run the container-backed tests, as `--filter "Category=Integration"`.
+
+Both images are pre-pulled so that a registry failure is reported as itself rather than as a
+container that would not start, and both are pinned to a digest that `ContainerImageTests` holds in
+step with the fixtures. No AWS credentials are configured in this job: the tests run against
+containers, and an accidental dependency on a real account should surface here as a failure rather
+than as a bill.
+
+This workflow is deliberately **not** a required check. These tests are slow, not unimportant, and a
+failure here still has to be looked at.
+
+### The LocalStack auth token
+
+`LOCALSTACK_AUTH_TOKEN` is a repository secret and a licence, not an AWS credential — see [SQS
+Emulation](testing-strategy.md#sqs-emulation) for why one is needed at all. It is declared as
+job-level `env` rather than on the steps that read it, because a step's own `env` block is not
+visible to that step's `if` condition and the `secrets` context is not available there at all. On a
+step-level declaration the conditional pull is skipped on every run, including the ones that do have
+a token.
+
+GitHub does not expose repository secrets to a pull request from a fork, so an outside contributor's
+run has no token however the repository is configured. Step 6 then excludes those tests by trait and
+says so in a warning, and the rest still run. They would skip themselves in any case, but only after
+paying for a two-gigabyte pull.
+
+The job carries a timeout. A licence that cannot activate never satisfies either container wait
+condition, and the Testcontainers default would spend an hour reaching that conclusion.
 
 ## Development Deployment
 

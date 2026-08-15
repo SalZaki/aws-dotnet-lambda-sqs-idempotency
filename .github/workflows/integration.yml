@@ -21,6 +21,27 @@ jobs:
   integration:
     name: Integration tests
     runs-on: ubuntu-latest
+
+    # An hour is the Testcontainers default for a wait strategy that never succeeds, and a container
+    # whose licence check fails never opens the port either strategy below is waiting on. Without a
+    # ceiling the job burns that hour before reporting a timeout that names a container start rather
+    # than the expired token behind it.
+    timeout-minutes: 20
+
+    # Declared on the job rather than on the steps that read it, because a step's own env block is not
+    # visible to that step's if condition — the condition is evaluated first — and the secrets context
+    # is not available there at all. A step-level declaration would leave the pull below permanently
+    # skipped, including on the runs that do have a token.
+    #
+    # This is not an AWS credential. LocalStack merged its community and pro images in 2026.3.0, and
+    # since 6 April 2026 the image exits with code 55 before opening its edge port unless a licence
+    # token is present. The free tier covers what these tests do. No AWS credentials are configured
+    # anywhere in this job: the tests must run against the containers on a clean machine, and an
+    # accidental dependency on a real account should show up here as a failure rather than as a
+    # surprise bill.
+    env:
+      LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
+
     steps:
       # Third-party actions are pinned to an immutable commit SHA rather than a
       # tag, so a moved tag cannot change what runs. Update deliberately.
@@ -39,18 +60,33 @@ jobs:
         run: dotnet build ReliableOrders.slnx -c Release --no-restore
 
       # Pulled explicitly so that an image-registry failure is reported as itself rather than as a
-      # container that would not start. Testcontainers would otherwise pull it inside the fixture,
+      # container that would not start. Testcontainers would otherwise pull them inside the fixtures,
       # where the error surfaces as a test failure with a misleading cause.
-      # Pinned to an immutable digest, matching DynamoDbFixture.Image. A moving tag would let a
-      # future image push quietly change the emulator behaviour these tests certify, and the
-      # dangerous direction is a green build certifying a guarantee that no longer holds.
+      # Both are pinned to an immutable digest, matching DynamoDbFixture.Image and
+      # LocalStackFixture.Image. A moving tag would let a future image push quietly change the
+      # emulator behaviour these tests certify, and the dangerous direction is a green build
+      # certifying a guarantee that no longer holds.
       - name: Pull dynamodb-local
         run: docker pull amazon/dynamodb-local:3.3.1@sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab
 
-      # No AWS credentials are configured anywhere in this job. The tests must run against the
-      # container on a clean machine, and an accidental dependency on a real account would show up
-      # here as a failure rather than as a surprise bill.
+      # Only when there is a token to run the LocalStack tests with. The pull is two gigabytes, and
+      # spending it on a job that is about to skip those tests wastes minutes of every fork's run.
+      - name: Pull localstack
+        if: env.LOCALSTACK_AUTH_TOKEN != ''
+        run: docker pull localstack/localstack:2026.07.4@sha256:f7b778d03717b58c3adce81a740bfafff5c6f9d639159bbf08da557c9ac1b513
+
+      # GitHub does not expose repository secrets to a pull request from a fork, so an outside
+      # contributor's run has no token however this repository is configured. Rather than fail their
+      # run on a container, the SQS tests are excluded by their trait and everything else still runs.
+      # The exclusion is announced, because a run that quietly tests less than it appears to is worse
+      # than one that tests less and says so.
       - name: Test
-        run: >
-          dotnet test tests/ReliableOrders.IntegrationTests/ReliableOrders.IntegrationTests.csproj
-          -c Release --no-build --filter "Category=Integration"
+        run: |
+          if [ -z "$LOCALSTACK_AUTH_TOKEN" ]; then
+            echo "::warning::LOCALSTACK_AUTH_TOKEN is not available to this run, so the SQS and batch response tests were skipped. This is expected for a pull request from a fork."
+            filter="Category=Integration&Category!=RequiresLocalStackToken"
+          else
+            filter="Category=Integration"
+          fi
+          dotnet test tests/ReliableOrders.IntegrationTests/ReliableOrders.IntegrationTests.csproj \
+            -c Release --no-build --filter "$filter"

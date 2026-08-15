@@ -27,4 +27,24 @@ internal static class TestCategory
     /// Requires a reachable Docker daemon.
     /// </summary>
     internal const string Integration = "Integration";
+
+    /// <summary>
+    /// Additionally requires a LocalStack auth token, and therefore outbound network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Carried as a second <c>Category</c> value alongside <see cref="Integration"/>, so the
+    /// integration workflow can run everything with <c>Category=Integration</c> when a token is
+    /// available and fall back to <c>Category=Integration&amp;Category!=RequiresLocalStackToken</c>
+    /// when there is none.
+    /// </para>
+    /// <para>
+    /// It exists because of who cannot supply one. GitHub does not expose repository secrets to a
+    /// pull request from a fork, so an outside contributor's run has no token however the repository
+    /// is configured. Without this split their run would fail on the container rather than on their
+    /// change; with it, the transaction tests still run and the workflow says plainly which tests were
+    /// left out.
+    /// </para>
+    /// </remarks>
+    internal const string RequiresLocalStackToken = "RequiresLocalStackToken";
 }

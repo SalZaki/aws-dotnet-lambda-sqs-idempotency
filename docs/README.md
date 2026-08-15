@@ -3,7 +3,7 @@
 Design documentation for the reliable SQS worker. The project front door is the
 [repository README](../README.md).
 
-Specification version 3. Design complete, backlog created, implementation not started. Change
+Specification version 3. Design complete, backlog created, implementation under way. Change
 history is in the [Revision Log](revision-log.md).
 
 ## Contents
