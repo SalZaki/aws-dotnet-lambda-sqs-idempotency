@@ -27,8 +27,10 @@ namespace ReliableOrders.IntegrationTests;
 /// start.
 /// </para>
 /// <para>
-/// Activation reaches app.localstack.cloud, so unlike the DynamoDB harness these tests need outbound
-/// network as well as a Docker daemon.
+/// Activation reaches api.localstack.cloud, so unlike the DynamoDB harness these tests need outbound
+/// network as well as a Docker daemon. That is the licensing API, not app.localstack.cloud, which is
+/// the dashboard a token is copied from — the distinction matters when an activation failure is being
+/// diagnosed against a proxy's allow list.
 /// </para>
 /// </remarks>
 public sealed class LocalStackFixture : IAsyncLifetime

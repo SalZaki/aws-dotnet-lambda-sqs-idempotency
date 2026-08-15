@@ -93,7 +93,8 @@ The pull-request gate collects line and branch coverage on every run and publish
 report as an artifact. No threshold is enforced. A number picked before the pipeline exists would
 either sit below what the suite already reaches, proving nothing, or block work unrelated to the code
 that moved it. Publishing the figure on every pull request is what lets a threshold be chosen from
-evidence once cases 19 to 28 are in.
+evidence, and every case above is now covered, so the evidence exists and the number can be picked
+from it rather than guessed.
 
 ## Concurrency Tests
 
