@@ -141,7 +141,36 @@ public sealed class DynamoDbOrderCommandStoreTests
     {
         var wrapped = new AmazonDynamoDBException("cancelled", new OperationCanceledException());
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Act(wrapped));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ActWhileCancelled(wrapped));
+    }
+
+    /// <summary>
+    /// A client-side timeout is a transient fault, whatever the SDK wrapped it in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The other half of the case above, and the one that decides the guard needs a token check.
+    /// <see cref="TaskCanceledException"/> derives from <see cref="OperationCanceledException"/>, and
+    /// <c>ClientConfig.Timeout</c> raises one with nobody having cancelled anything. Matching on the
+    /// type alone rethrew a socket timeout as though the invocation were ending.
+    /// </para>
+    /// <para>
+    /// Nothing downstream broke, which is why it survived: the handler returned the record and SQS
+    /// redelivered it. What it cost was the log line, written from the handler's branch for defects
+    /// with only the message identifier in scope, so an ordinary timeout could not be found by event
+    /// or by order.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task A_wrapped_client_timeout_is_transient_when_nothing_was_cancelled()
+    {
+        var timeout = new AmazonDynamoDBException("timed out", new TaskCanceledException());
+
+        var result = await Act(timeout);
+
+        Assert.Equal(
+            WriteFailureReason.ServiceUnavailable,
+            Assert.IsType<OrderWriteResult.TransientFault>(result).Reason);
     }
 
     /// <summary>
@@ -222,7 +251,30 @@ public sealed class DynamoDbOrderCommandStoreTests
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, "No failure defined."),
     };
 
-    private static async Task<OrderWriteResult> Act(Exception? failure)
+    /// <remarks>
+    /// The token is the test context's, which is never cancelled. That is the ordinary case, and it is
+    /// what makes <see cref="ActWhileCancelled"/> worth having as a separate helper rather than a
+    /// parameter nobody reading a call site would notice.
+    /// </remarks>
+    private static Task<OrderWriteResult> Act(Exception? failure) =>
+        TryCreate(failure, TestContext.Current.CancellationToken);
+
+    /// <remarks>
+    /// Cancelled before the call rather than during it. The store reads the token only when the SDK
+    /// hands it a wrapped cancellation, so the timing that matters is whether it is cancelled by then.
+    /// </remarks>
+    private static async Task<OrderWriteResult> ActWhileCancelled(Exception? failure)
+    {
+        using var cancellation = new CancellationTokenSource();
+
+        await cancellation.CancelAsync();
+
+        return await TryCreate(failure, cancellation.Token);
+    }
+
+    private static async Task<OrderWriteResult> TryCreate(
+        Exception? failure,
+        CancellationToken cancellationToken)
     {
         var orderEvent = ValidEvent.Create();
 
@@ -234,7 +286,7 @@ public sealed class DynamoDbOrderCommandStoreTests
         return await store.TryCreateAsync(
             orderEvent,
             Hasher.ComputeHashes(orderEvent),
-            TestContext.Current.CancellationToken);
+            cancellationToken);
     }
 
     /// <summary>

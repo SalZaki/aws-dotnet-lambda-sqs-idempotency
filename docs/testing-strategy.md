@@ -41,8 +41,9 @@
 27. Metric dimensions do not contain high-cardinality identifiers.
 28. Permanent-failure metrics are suppressed when `ApproximateReceiveCount > 1` (see Retry
     Amplification of Permanent Failures).
-29. Cancellation tokens are forwarded, and `OperationCanceledException` is not reclassified as
-    transient.
+29. Cancellation tokens are forwarded, `OperationCanceledException` is not reclassified as transient
+    when the token was cancelled, and a client-side timeout is not misclassified as cancellation when
+    it was not.
 30. Persisted timestamps derive from `occurredAtUtc`, not from `TimeProvider`.
 
 ### Coverage of the required cases
@@ -80,7 +81,7 @@ than in an issue so the plan and its status cannot drift apart.
 | 26 | `LogRedactionTests`, which also pins the complete field set of a conflict line |
 | 27 | `EmbeddedMetricsPublisherTests`, over the dimension set and over the whole published record |
 | 28 | `EmbeddedMetricsPublisherTests`, across five deliveries and over the shape of `IInvocationMetrics` |
-| 29 | `DynamoDbOrderCommandStoreTests`, both halves — the token is forwarded, and cancellation is neither reclassified nor swallowed when the SDK wraps it. `OrderMessageProcessorTests` covers the same forwarding one layer up |
+| 29 | `DynamoDbOrderCommandStoreTests`, over three cases — the token is forwarded, a wrapped cancellation propagates when the token is cancelled, and a wrapped client timeout returns `TransientFault` when it is not. `OrderMessageProcessorTests` covers the same forwarding one layer up |
 | 30 | `OrderWriteRequestTests`, `OrderCommandStoreTests` |
 
 Every case above is covered. Cases 19 to 28 were listed here as outstanding while the components they

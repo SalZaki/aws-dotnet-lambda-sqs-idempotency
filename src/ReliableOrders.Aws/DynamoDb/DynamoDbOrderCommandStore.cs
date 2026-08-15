@@ -107,12 +107,22 @@ public sealed class DynamoDbOrderCommandStore : IOrderCommandStore
             // of spending the message's receive attempts.
             return new OrderWriteResult.PermanentFault(PermanentReasonFor(exception)!);
         }
-        catch (AmazonServiceException exception) when (exception.InnerException is OperationCanceledException inner)
+        catch (AmazonServiceException exception)
+            when (exception.InnerException is OperationCanceledException inner
+                && cancellationToken.IsCancellationRequested)
         {
             // Cancellation that the SDK wrapped on its way out. Unwrapped rather than reported as a
             // downstream fault, because the invocation is ending and blaming DynamoDB for this
             // service's own deadline would send an operator looking in the wrong place. Captured so the
             // original stack survives the rethrow.
+            //
+            // The token check is what separates that from a client-side HTTP timeout. TaskCanceledException
+            // derives from OperationCanceledException, and ClientConfig.Timeout raises one with nobody
+            // having cancelled anything — an ordinary transient fault this store's contract says it
+            // reports by returning a value. Without the check it left here as an exception instead, and
+            // the handler caught it in the branch reserved for defects, which logs the record without
+            // the order identity the processor had already put in scope. The outcome was right and the
+            // line was unfindable by event or order.
             ExceptionDispatchInfo.Capture(inner).Throw();
 
             throw;
