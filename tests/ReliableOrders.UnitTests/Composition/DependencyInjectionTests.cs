@@ -1,11 +1,13 @@
 using Amazon.DynamoDBv2;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry.Trace;
 using ReliableOrders.Aws.Sqs;
 using ReliableOrders.Core.Observability;
 using ReliableOrders.Core.Persistence;
 using ReliableOrders.Core.Processing;
 using ReliableOrders.Function;
 using ReliableOrders.Function.Configuration;
+using ReliableOrders.Function.Observability;
 
 namespace ReliableOrders.UnitTests.Composition;
 
@@ -35,6 +37,45 @@ public sealed class DependencyInjectionTests
         Assert.NotNull(provider.GetRequiredService<IOrderMessageProcessor>());
         Assert.NotNull(provider.GetRequiredService<IOrderCommandStore>());
         Assert.NotNull(provider.GetRequiredService<ProcessingLog>());
+
+        // Nothing in the graph asks for the tracer provider — the components that trace hold an
+        // ActivitySource and never resolve one — so the composition root resolves it itself. Asserted
+        // here as well, because that resolve is what stands between a registration mistake and a
+        // service that exports no spans while looking correctly wired.
+        Assert.NotNull(provider.GetRequiredService<TracerProvider>());
+    }
+
+    /// <summary>
+    /// The container owns the tracer provider, which is what shuts the exporter down.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asserted on the registration rather than on a disposed provider, because the difference is
+    /// invisible from outside: <c>Microsoft.Extensions.DependencyInjection</c> disposes only what it
+    /// created, so a <see cref="TracerProvider"/> registered as an already-built instance is never
+    /// disposed and nothing about resolving it says so. What is left behind is this process's
+    /// <see cref="System.Diagnostics.ActivityListener"/>, still attached to the source, and the batch
+    /// exporter's worker thread, still retrying an endpoint nothing is serving.
+    /// </para>
+    /// <para>
+    /// The absence of an instance is half the assertion. A factory alone would pass while a second
+    /// registration shadowed it, and a test that only checked for a factory would not notice.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void The_container_owns_the_tracer_provider()
+    {
+        var services = new ServiceCollection();
+
+        services.AddTracing(Configuration());
+
+        var registration = Assert.Single(
+            services,
+            service => service.ServiceType == typeof(TracerProvider));
+
+        Assert.NotNull(registration.ImplementationFactory);
+        Assert.Null(registration.ImplementationInstance);
+        Assert.Equal(ServiceLifetime.Singleton, registration.Lifetime);
     }
 
     /// <summary>

@@ -144,18 +144,80 @@ spans.
 
 ### Approach
 
-- Add the ADOT collector layer and configure the OTLP exporter.
-- Use one application-wide `ActivitySource`.
-- Instrument DynamoDB AWS SDK calls via the AWS SDK instrumentation package.
-- Add spans for parsing, validation, canonical hashing, transactional persistence, and duplicate
+- The ADOT collector layer, pinned to a version, with the OTLP exporter configured from the standard
+  `OTEL_EXPORTER_OTLP_*` variables. The collector alone, not a language layer:
+  `AWS_LAMBDA_EXEC_WRAPPER` is deliberately unset, because it starts the auto-instrumentation this
+  service replaces with its own.
+- One application-wide `ActivitySource`, named for the assembly and defined in `Tracing`.
+- DynamoDB SDK calls instrumented through the AWS SDK instrumentation package.
+- Spans for parsing, validation, canonical hashing, transactional persistence, and duplicate
   classification.
-- Propagate W3C trace context through SQS message attributes where the publisher supports it. The
-  event source mapping does not link producer and consumer traces automatically; the link exists
-  only because the publisher wrote the context and the handler read it.
-- Export to AWS X-Ray and/or CloudWatch Application Signals.
+- W3C trace context read from SQS message attributes. The event source mapping does not link
+  producer and consumer traces; the link exists only because the publisher wrote the context and the
+  handler read it. A message with none, or with a malformed header, produces a root span rather than
+  a failure — tracing is diagnostic, and refusing an order over a telemetry field would turn a
+  monitoring defect into a dead-lettered message.
+- Export to AWS X-Ray through the collector. The execution role therefore holds the two X-Ray write
+  actions, which are the only unscoped permissions in the stack; see [Security
+  Requirements](security.md).
 - Keep trace attributes free of sensitive data — no raw bodies, no customer identifiers.
 
 Treat tracing as diagnostic telemetry, not as a source of business correctness.
+
+#### One span per record, and no span for the batch
+
+A batch holds up to ten records, each carrying whatever trace context its own publisher wrote. A span
+covering the invocation would have to belong to one of those traces and would misattribute the rest,
+so there is none: each record is a `Consumer` span parented from its own `traceparent`, and every
+record span carries `faas.invocation_id`. That attribute is what groups an invocation's records, in
+place of a parent that cannot exist.
+
+A record deferred at the processing deadline produces no span at all. It was never attempted, and a
+span would put a zero-length step into the publisher's trace for work this invocation declined to
+start. Deferral is reported by its log event and its metric.
+
+#### X-Ray decides the shape of a trace identifier
+
+X-Ray reads the first four bytes of a trace identifier as a Unix timestamp and rejects anything
+outside roughly a month. OpenTelemetry generates random W3C identifiers, so without intervention the
+collector's exporter drops almost every span — and drops them silently, with the function exporting,
+the invocation succeeding and X-Ray showing nothing. The tracer provider therefore generates X-Ray
+compatible identifiers.
+
+That fixes the traces this service originates. **It does not fix a trace it continues.** A record
+parented from a publisher's `traceparent` inherits the publisher's identifier, so a publisher that
+generates ordinary W3C identifiers produces traces the exporter refuses — the propagated traces,
+which are the ones propagation exists for. Either every publisher generates X-Ray compatible
+identifiers, or
+the collector is configured to skip timestamp validation, or the export goes somewhere that does not
+impose the format. The demonstration publisher in Story 8.2 has to make the same choice.
+
+#### The exporter batches inside this process
+
+Spans are queued in the function and flushed at the end of every invocation, not left to the
+exporter's schedule. Lambda freezes the execution environment as soon as the handler returns, which
+stops the batch worker mid-queue: a record processed near the end of an invocation would wait for a
+thaw that may never come, and on a low-rate queue that is most traces. The flush is bounded so a
+collector that is not listening cannot hold an invocation open.
+
+Exporting synchronously per span would avoid the queue and is the wrong trade — six spans a record,
+ten records an invocation, each paying a round trip on a path measured against a deadline.
+
+#### Attribute vocabulary
+
+Where OpenTelemetry defines a convention, the convention wins — `messaging.system`,
+`messaging.message.id`, `messaging.operation.type` and `faas.invocation_id` — because a backend already
+knows how to render them. Everything else is prefixed `reliable_orders.` so it cannot collide with a
+convention added later.
+
+The outcome and reason attributes use the same vocabularies as the log fields of the same names, so
+a trace and a log line about one record agree rather than describing it in two dialects. Span status
+is set from whether the record is being returned, not from whether it succeeded: a duplicate is the
+idempotency mechanism working and is not an error.
+
+The identifiers on a span are the three the log scope carries — event, order and correlation. No
+customer identifier, no amount, no item description, no body. The Do Not Log list does not stop
+applying because the destination is a different system with different retention.
 
 ## CloudWatch Dashboard and Alarms
 

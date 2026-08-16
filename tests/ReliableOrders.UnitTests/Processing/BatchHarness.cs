@@ -63,6 +63,16 @@ internal sealed class BatchHarness : IDisposable
     /// <summary>Message identifiers whose processing throws, standing in for a defect.</summary>
     public HashSet<string> Throwing { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// A W3C <c>traceparent</c> to put on a message, per message identifier.
+    /// </summary>
+    /// <remarks>
+    /// Written as a message attribute, which is where a publisher writes it and the only place SQS
+    /// carries it. A message absent from here has none, which is the ordinary case for a publisher
+    /// that does not propagate.
+    /// </remarks>
+    public Dictionary<string, string> TraceParents { get; } = new(StringComparer.Ordinal);
+
     /// <summary>Message identifiers whose processing reports the invocation is ending.</summary>
     public HashSet<string> Cancelling { get; } = new(StringComparer.Ordinal);
 
@@ -129,6 +139,16 @@ internal sealed class BatchHarness : IDisposable
         {
             [IncomingMessageMapper.ApproximateReceiveCountAttribute] = "1",
         },
+        MessageAttributes = TraceParents.TryGetValue(messageId, out var traceParent)
+            ? new Dictionary<string, SQSEvent.MessageAttribute>(StringComparer.Ordinal)
+            {
+                [RecordTrace.TraceParentAttribute] = new()
+                {
+                    DataType = "String",
+                    StringValue = traceParent,
+                },
+            }
+            : [],
     };
 
     /// <remarks>

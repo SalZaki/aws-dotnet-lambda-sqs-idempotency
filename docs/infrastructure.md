@@ -120,10 +120,19 @@ The logical name is `OrderProcessorFunction`. Initial configuration follows.
 | Ephemeral storage | Default unless benchmark data justifies more |
 | Reserved concurrency | Configurable, 10 in development |
 | Tracing | OpenTelemetry only, X-Ray active tracing **disabled** |
+| Layers | The ADOT collector, pinned to a version and matching the function's architecture |
 | Log format | Text, because the function writes its own JSON (see below) |
 | Log retention | 30 days, on a log group the stack declares |
 | VPC | None unless a real private-network dependency is introduced |
-| Execution role | Least privilege |
+| Execution role | Least privilege, plus the two X-Ray write actions the collector needs |
+
+The collector layer is pinned to a version for the reason the container images are: an unpinned layer
+would change what runs beside the function without a deployment. Unlike an image digest, nothing in
+the build can verify the ARN — a wrong Region, architecture or version is rejected at deploy rather
+than at synthesis, so the CDK assertion checks the shape and the pin, not the existence.
+
+`AWS_LAMBDA_EXEC_WRAPPER` is deliberately not set. It starts the auto-instrumentation carried by the
+language layers, and this function instruments itself; a CDK assertion holds it absent.
 
 Environment variables.
 

@@ -38,20 +38,55 @@ public sealed partial class TestPlanAuditTests
     }
 
     /// <summary>
-    /// Every case in the plan is accounted for, either by a test or by what it waits on.
+    /// Every required case has a row in the coverage table, and the table invents none.
     /// </summary>
     /// <remarks>
-    /// Ten of the thirty describe components that do not exist yet. Listing them as outstanding is what
-    /// keeps them from being forgotten, so the presence of every row is asserted rather than its text.
+    /// <para>
+    /// Both sides are read from the document, so adding a case needs no edit here. A count written
+    /// into this test was worse than no test on the day a case was added: the failure named the
+    /// number rather than the missing row, and the cheapest way to green was to raise the number.
+    /// </para>
+    /// <para>
+    /// What it catches is a case listed as required and then not carried into the table — a plan that
+    /// silently stops tracking something it asked for. Whether the named class actually covers what
+    /// the row claims stays a review judgement, as the case above says.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void The_plan_accounts_for_all_thirty_required_cases()
+    public void Every_required_case_has_a_coverage_row()
     {
-        var rows = CaseRow().Matches(ReadTestingStrategy())
-            .Select(match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
-            .ToArray();
+        var plan = ReadTestingStrategy();
 
-        Assert.Equal(Enumerable.Range(1, 30), rows);
+        var required = Numbers(RequiredCase().Matches(UnitTestCases(plan)));
+        var covered = Numbers(CaseRow().Matches(plan));
+
+        Assert.NotEmpty(required);
+        Assert.Equal(Enumerable.Range(1, required.Length), required);
+        Assert.Equal(required, covered);
+    }
+
+    private static int[] Numbers(MatchCollection matches) =>
+        [.. matches.Select(match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))];
+
+    /// <summary>
+    /// The unit tests' required-cases list, and nothing after it.
+    /// </summary>
+    /// <remarks>
+    /// Concurrency tests and the real-AWS scenarios number their own lists from one, and the coverage
+    /// table covers neither. Matching numbered lines across the whole document would count all three
+    /// as required cases and compare a run of forty-odd against a table of thirty-six.
+    /// </remarks>
+    private static string UnitTestCases(string plan)
+    {
+        const string heading = "### Required cases";
+
+        var start = plan.IndexOf(heading, StringComparison.Ordinal);
+
+        Assert.True(start >= 0, $"Expected '{heading}' under Unit Tests in the test plan.");
+
+        var end = plan.IndexOf("###", start + heading.Length, StringComparison.Ordinal);
+
+        return end < 0 ? plan[start..] : plan[start..end];
     }
 
     private static string[] NamedTestClasses() =>
@@ -112,6 +147,16 @@ public sealed partial class TestPlanAuditTests
     /// <summary>Matches the case number at the start of a coverage table row.</summary>
     [GeneratedRegex(@"^\| (\d+) \| ", RegexOptions.Multiline)]
     private static partial Regex CaseRow();
+
+    /// <summary>
+    /// Matches a numbered case in the required-cases list.
+    /// </summary>
+    /// <remarks>
+    /// Anchored to the start of a line so a number appearing inside a case's prose is not read as
+    /// another case. Only the unit-test list is numbered this way; the other sections use bullets.
+    /// </remarks>
+    [GeneratedRegex(@"^(\d+)\. ", RegexOptions.Multiline)]
+    private static partial Regex RequiredCase();
 
     /// <summary>Matches a test class declaration.</summary>
     [GeneratedRegex(@"class\s+([A-Za-z0-9_]+Tests)\b")]

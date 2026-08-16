@@ -86,6 +86,141 @@ public sealed class OrderProcessorConstructTests
     }
 
     /// <summary>
+    /// The collector layer is attached, pinned, and the collector alone.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The other half of the one-pipeline rule. Active tracing being off only means X-Ray is not
+    /// producing a second trace; without a collector beside the function, the pipeline that is
+    /// supposed to be running produces nothing either, and both halves look identical from the
+    /// template.
+    /// </para>
+    /// <para>
+    /// The version is asserted rather than the name alone. An unpinned layer would change what runs
+    /// beside the function without a deployment, and nothing else in the build can check the ARN — it
+    /// is rejected at deploy, not at synthesis.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void The_function_carries_the_pinned_collector_layer()
+    {
+        var layers = Assert.IsType<object[]>(Function().Properties["Layers"]);
+
+        var arn = Assert.IsType<string>(Assert.Single(layers));
+
+        Assert.Contains(":layer:aws-otel-collector-", arn, StringComparison.Ordinal);
+        Assert.Matches(@"-ver-\d+-\d+-\d+:\d+$", arn);
+    }
+
+    /// <summary>
+    /// The function's architecture and the collector layer's are the same one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The pair the construct says moves together, asserted so that it has to. The layer is published
+    /// per architecture and the mismatch is invisible to synthesis: the template is valid, every other
+    /// assertion here passes, and the failure arrives when the collector extension initialises in the
+    /// deployed environment — where it reads as a broken function rather than as a wrong layer.
+    /// </para>
+    /// <para>
+    /// Both sides are read from the template rather than one being compared against a constant. A test
+    /// that asserted x86_64 twice would pass on the day someone changed the architecture and left the
+    /// layer behind, which is the only day it is needed.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void The_collector_layer_matches_the_functions_architecture()
+    {
+        var properties = Function().Properties;
+
+        // Named rather than defaulted, which is the other way this can regress: CDK leaves the property
+        // out when nothing sets it, and a function deploying on an unstated default is a function whose
+        // architecture the layer cannot be checked against.
+        Assert.True(
+            properties.ContainsKey("Architectures"),
+            "The function states no architecture, so nothing pins the collector layer to one. Set "
+            + "Architecture on the function alongside the layer it is published for.");
+
+        var architecture = Assert.IsType<string>(
+            Assert.Single(Assert.IsType<object[]>(properties["Architectures"])));
+
+        var arn = Assert.IsType<string>(
+            Assert.Single(Assert.IsType<object[]>(properties["Layers"])));
+
+        var expected = architecture switch
+        {
+            "x86_64" => "amd64",
+            "arm64" => "arm64",
+            _ => throw new Xunit.Sdk.XunitException(
+                $"No ADOT collector layer is known for {architecture}. Add the mapping alongside the "
+                + "architecture, or the layer this asserts against cannot be named."),
+        };
+
+        Assert.Contains($":layer:aws-otel-collector-{expected}-", arn, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The auto-instrumentation wrapper is not enabled.
+    /// </summary>
+    /// <remarks>
+    /// <c>AWS_LAMBDA_EXEC_WRAPPER</c> points at the entry script of the language layers, which
+    /// auto-instrument. This function instruments itself, for the reason the observability
+    /// specification gives, and setting the variable would run an instrumentation path nothing here
+    /// has been written against.
+    /// </remarks>
+    [Fact]
+    public void The_function_does_not_enable_the_auto_instrumentation_wrapper()
+    {
+        Assert.DoesNotContain(
+            "AWS_LAMBDA_EXEC_WRAPPER",
+            Variables().Keys,
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// The two actions the collector needs, in the order CloudFormation renders them.
+    /// </summary>
+    /// <remarks>
+    /// Alphabetical, which is not the order the construct lists them in — CDK sorts a statement's
+    /// actions on the way out. Written the rendered way round because that is what the assertion
+    /// compares against, and stated here so the next reader does not correct it back.
+    /// </remarks>
+    private static readonly string[] TraceWriteActions =
+        ["xray:PutTelemetryRecords", "xray:PutTraceSegments"];
+
+    /// <summary>
+    /// The role can write traces.
+    /// </summary>
+    /// <remarks>
+    /// The collector runs under the function's role, so a missing permission is silent: spans leave
+    /// the function, the collector fails to deliver them, and the invocation succeeds. Both actions
+    /// are unscoped because X-Ray defines no resource for them, which is the one documented exception
+    /// to resource scoping.
+    /// </remarks>
+    [Fact]
+    public void The_role_may_write_traces()
+    {
+        // ObjectLike at every level. A plain dictionary is matched exactly, so a document written that
+        // way would have to restate Version and every other statement the role already holds — and
+        // would then fail whenever an unrelated grant was added.
+        Template().HasResourceProperties("AWS::IAM::Policy", new Dictionary<string, object>
+        {
+            ["PolicyDocument"] = Match.ObjectLike(new Dictionary<string, object>
+            {
+                ["Statement"] = Match.ArrayWith(
+                [
+                    Match.ObjectLike(new Dictionary<string, object>
+                    {
+                        ["Action"] = TraceWriteActions,
+                        ["Effect"] = "Allow",
+                        ["Resource"] = "*",
+                    }),
+                ]),
+            }),
+        });
+    }
+
+    /// <summary>
     /// Every variable the function requires at cold start is set.
     /// </summary>
     /// <remarks>

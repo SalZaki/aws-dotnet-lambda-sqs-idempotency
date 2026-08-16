@@ -1,10 +1,13 @@
+using System.Diagnostics;
 using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Runtime;
 using ReliableOrders.Aws.DynamoDb;
 using ReliableOrders.Core.Idempotency;
+using ReliableOrders.Core.Observability;
 using ReliableOrders.Core.Persistence;
+using ReliableOrders.UnitTests.Observability;
 using ReliableOrders.UnitTests.Validation;
 
 namespace ReliableOrders.UnitTests.Persistence;
@@ -207,6 +210,86 @@ public sealed class DynamoDbOrderCommandStoreTests
     {
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => Act(new OperationCanceledException()));
+    }
+
+    /// <summary>
+    /// The transaction runs under a client span.
+    /// </summary>
+    /// <remarks>
+    /// A client span rather than an internal one, so a backend renders it as a call out of the process
+    /// and the AWS SDK's own spans hang beneath it. Without it the DynamoDB call would appear in a
+    /// trace only as whatever the SDK instrumentation emitted, with nothing saying which step of this
+    /// service asked for it.
+    /// </remarks>
+    [Fact]
+    public async Task The_transaction_runs_under_a_client_span()
+    {
+        using var capture = new SpanCapture();
+        using var record = Tracing.Source.StartActivity(Tracing.Spans.ProcessRecord);
+
+        Assert.NotNull(record);
+
+        await Act(failure: null);
+
+        var span = capture.InTrace(record.TraceId, Tracing.Spans.Persist);
+
+        Assert.Equal(ActivityKind.Client, span.Kind);
+    }
+
+    /// <summary>
+    /// Classification is its own span, carrying which safeguard decided.
+    /// </summary>
+    /// <remarks>
+    /// Separate from the persist span because the two answer different questions — how long DynamoDB
+    /// took, against how long was spent deciding what its refusal meant. The scope is what makes a
+    /// conflict investigated months later findable, and it is the only attribute: the stored item and
+    /// the hash that disagreed stay out of a system with its own retention.
+    /// </remarks>
+    [Fact]
+    public async Task Classification_is_its_own_span_carrying_the_scope()
+    {
+        using var capture = new SpanCapture();
+        using var record = Tracing.Source.StartActivity(Tracing.Spans.ProcessRecord);
+
+        Assert.NotNull(record);
+
+        var orderEvent = ValidEvent.Create();
+        var hashes = Hasher.ComputeHashes(orderEvent);
+
+        var cancellation = new TransactionCanceledException("cancelled")
+        {
+            CancellationReasons =
+            [
+                new CancellationReason
+                {
+                    Code = "ConditionalCheckFailed",
+                    Item = new Dictionary<string, AttributeValue>(StringComparer.Ordinal)
+                    {
+                        [IdempotencyTableSchema.EnvelopeSha256] = new() { S = hashes.EnvelopeSha256 },
+                    },
+                },
+                new CancellationReason { Code = "None" },
+            ],
+        };
+
+        var store = new DynamoDbOrderCommandStore(
+            new StubDynamoDb(cancellation),
+            new DynamoDbTableNames("orders", "idempotency"),
+            IdempotencyRetention.Default);
+
+        await store.TryCreateAsync(orderEvent, hashes, TestContext.Current.CancellationToken);
+
+        var classify = capture.InTrace(record.TraceId, Tracing.Spans.Classify);
+
+        Assert.Equal(nameof(DuplicateScope.Event), classify.GetTagItem(Tracing.Attributes.Scope));
+
+        // A sibling of the persist span, not a child of it. Nested, persist's duration would include
+        // the classifier's, so a latency alarm on the write would fire on classifier slowness — on
+        // exactly the conflict path where the two most need telling apart. The parent is the record.
+        Assert.Equal(record.SpanId, classify.ParentSpanId);
+        Assert.NotEqual(
+            capture.InTrace(record.TraceId, Tracing.Spans.Persist).SpanId,
+            classify.ParentSpanId);
     }
 
     [Fact]
