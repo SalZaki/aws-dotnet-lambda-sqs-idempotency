@@ -1,7 +1,7 @@
 using System.Globalization;
 using Amazon.CDK;
-using Amazon.CDK.AWS.Lambda;
 using Amazon.CDK.AWS.IAM;
+using Amazon.CDK.AWS.Lambda;
 using Amazon.CDK.AWS.Lambda.EventSources;
 using Amazon.CDK.AWS.Logs;
 using Constructs;
