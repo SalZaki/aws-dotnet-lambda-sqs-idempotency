@@ -203,6 +203,15 @@ collector that is not listening cannot hold an invocation open.
 Exporting synchronously per span would avoid the queue and is the wrong trade — six spans a record,
 ten records an invocation, each paying a round trip on a path measured against a deadline.
 
+The provider is registered behind a factory and resolved once at cold start, and both halves are
+required. Nothing in the graph asks for a tracer provider — the components that trace hold an
+`ActivitySource` — so without that resolve nothing is constructed, no listener attaches, and every
+span is dropped by a composition root that looks correctly wired. And only a factory's result is
+disposed by the container: registered as an already-built instance, the listener and the exporter's
+worker thread outlive the container that was supposed to own them. One effect is not undone by
+disposal, because the X-Ray identifiers above are produced by replacing the process-wide trace
+identifier generator and nothing restores the original.
+
 #### Attribute vocabulary
 
 Where OpenTelemetry defines a convention, the convention wins — `messaging.system`,
