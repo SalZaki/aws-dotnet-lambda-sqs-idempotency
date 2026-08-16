@@ -46,7 +46,7 @@
     OpenTelemetry. Permitted in ReliableOrders.Function only. The spans themselves are started from
     System.Diagnostics.ActivitySource, which is in the framework, so Core and Aws are instrumented
     without referencing any of this — an SDK is what turns those spans into exported telemetry, and
-    that is a hosting decision. Kept on one version across the three packages, which OpenTelemetry
+    that is a hosting decision. Kept on one version across the four packages, which OpenTelemetry
     ships in lockstep and does not support mixing.
   -->
   <ItemGroup>

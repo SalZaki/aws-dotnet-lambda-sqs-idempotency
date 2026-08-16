@@ -341,7 +341,7 @@ public sealed class TracingTests
             ],
             record.TagObjects.Select(tag => tag.Key).Order(StringComparer.Ordinal));
 
-        var written = string.Join('', record.TagObjects.Select(tag => tag.Value?.ToString()));
+        var written = string.Join('\u001F', record.TagObjects.Select(tag => tag.Value?.ToString()));
 
         Assert.DoesNotContain(orderEvent.Data.CustomerId, written, StringComparison.Ordinal);
         Assert.DoesNotContain(orderEvent.Data.ItemDescription, written, StringComparison.Ordinal);
