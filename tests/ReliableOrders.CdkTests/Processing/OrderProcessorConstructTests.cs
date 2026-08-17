@@ -27,6 +27,17 @@ public sealed class OrderProcessorConstructTests
     private const int IdempotencyRetentionDays = 21;
 
     /// <summary>
+    /// Scaled to this class's 302 second visibility timeout rather than reused from the development
+    /// defaults, which pair 300 seconds with a 210 second timeout and would be refused here.
+    /// </summary>
+    private static readonly AlarmThresholds AlarmThresholds = new(
+        oldestMessageAgeSeconds: 600,
+        throttleEvaluationMinutes: 3,
+        transientFailuresPerFiveMinutes: 10,
+        noProgressMinutes: 15,
+        deadlineDeferralsPerFiveMinutes: 1);
+
+    /// <summary>
     /// The function runs the configured runtime, at the configured size, on the documented handler.
     /// </summary>
     /// <remarks>
@@ -413,5 +424,6 @@ public sealed class OrderProcessorConstructTests
         dlqRetentionDays: 14,
         idempotencyRetentionDays: IdempotencyRetentionDays,
         retainData: retainData,
-        enablePointInTimeRecovery: false);
+        enablePointInTimeRecovery: false,
+        alarmThresholds: AlarmThresholds);
 }

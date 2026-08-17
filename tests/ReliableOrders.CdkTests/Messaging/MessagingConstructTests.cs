@@ -28,6 +28,17 @@ public sealed class MessagingConstructTests
     private const int SecondsPerDay = 86_400;
 
     /// <summary>
+    /// Scaled to this class's 302 second visibility timeout rather than reused from the development
+    /// defaults, which pair 300 seconds with a 210 second timeout and would be refused here.
+    /// </summary>
+    private static readonly AlarmThresholds AlarmThresholds = new(
+        oldestMessageAgeSeconds: 600,
+        throttleEvaluationMinutes: 3,
+        transientFailuresPerFiveMinutes: 10,
+        noProgressMinutes: 15,
+        deadlineDeferralsPerFiveMinutes: 1);
+
+    /// <summary>
     /// The formula from docs/infrastructure.md, recomputed here from the values the construct was
     /// given.
     /// </summary>
@@ -224,5 +235,6 @@ public sealed class MessagingConstructTests
         dlqRetentionDays: DlqRetentionDays,
         idempotencyRetentionDays: 30,
         retainData: retainData,
-        enablePointInTimeRecovery: false);
+        enablePointInTimeRecovery: false,
+        alarmThresholds: AlarmThresholds);
 }

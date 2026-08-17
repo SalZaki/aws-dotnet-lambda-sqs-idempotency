@@ -37,6 +37,9 @@ internal static class SynthesizedStack
     /// <summary>The type an identity policy is declared as.</summary>
     public const string IamPolicyResourceType = "AWS::IAM::Policy";
 
+    /// <summary>The type the operator dashboard is declared as.</summary>
+    public const string DashboardResourceType = "AWS::CloudWatch::Dashboard";
+
     /// <summary>
     /// Synthesises a stack built from the given configuration.
     /// </summary>
