@@ -1,6 +1,7 @@
 using Amazon.DynamoDBv2;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Trace;
 using ReliableOrders.Aws.DynamoDb;
 using ReliableOrders.Aws.Sqs;
 using ReliableOrders.Aws.Telemetry;
@@ -53,6 +54,11 @@ public static class DependencyInjection
         services.AddSingleton(configuration);
         services.AddLogging(builder => builder.AddJsonStdoutLogging(configuration.LogLevel));
 
+        // Registered here and resolved at the end of this method, which is what puts a subscriber on
+        // the source before any component that starts a span can run. See TracingConfiguration for why
+        // the registration and that resolve are two halves of one thing.
+        services.AddTracing(configuration);
+
         // Injected rather than read from DateTimeOffset.UtcNow, and used only for latency and the
         // invocation deadline. No value written inside the transaction derives from it; the store
         // takes no clock at all, which is what keeps a retry's request body identical to the first
@@ -94,10 +100,17 @@ public static class DependencyInjection
         // Validated on build rather than on first resolve. A lifetime mistake — a singleton holding
         // something scoped — would otherwise surface as a failure on the first message rather than at
         // the cold start that built it.
-        return services.BuildServiceProvider(new ServiceProviderOptions
+        var provider = services.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateOnBuild = true,
             ValidateScopes = true,
         });
+
+        // The one service resolved here rather than left to whatever asks for it first, because nothing
+        // asks for it at all. Building it is what attaches the listener the spans need, and resolving it
+        // from the container is what makes the container responsible for shutting the exporter down.
+        provider.GetRequiredService<TracerProvider>();
+
+        return provider;
     }
 }

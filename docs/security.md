@@ -15,6 +15,10 @@ profiles and mitigations belong in `docs/threat-model.md`, which is not written 
   - CloudWatch logging
   - tracing and telemetry where needed
 - Avoid wildcard resource permissions where service APIs support resource scoping.
+  - `xray:PutTraceSegments` and `xray:PutTelemetryRecords` are the exception, and the only one. X-Ray
+    defines no resource for either action — the API takes segments rather than an ARN — so there is
+    no resource-scoped statement to write. The execution role holds both, because the collector layer
+    delivers traces under the function's identity. Nothing else in the stack is unscoped.
 - Configure a CDK bootstrap permissions boundary for a hardened deployment environment.
 - Add `cdk-nag` checks and explicitly document any suppressed finding.
 - Enable Dependabot, CodeQL, secret scanning, and dependency review.

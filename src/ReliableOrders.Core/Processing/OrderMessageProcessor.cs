@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using ReliableOrders.Core.Contracts;
 using ReliableOrders.Core.Idempotency;
 using ReliableOrders.Core.Observability;
@@ -88,6 +89,13 @@ public sealed class OrderMessageProcessor : IOrderMessageProcessor
 
         var started = _clock.GetTimestamp();
 
+        // The record's span, started by whatever delivered the message, or null when nothing is
+        // listening. Captured here rather than read from Activity.Current further down, where the step
+        // spans below are current instead and an attribute meant for the record would land on one of
+        // them. Nothing is started here: this layer knows no transport, and a span covering the record
+        // needs the message identifier and the publisher's trace context, which only the transport has.
+        var span = Activity.Current;
+
         // Opened before anything can fail, because the message identifier is the only thing a body
         // that never parses leaves behind to find it by.
         using var record = _log.BeginRecord(message.MessageId, message.ApproximateReceiveCount);
@@ -95,14 +103,103 @@ public sealed class OrderMessageProcessor : IOrderMessageProcessor
         // One Match, with the parsed branch returning the task the rest of the work runs on. Matching
         // twice — once for a failure reason and again for the event — would give up the exhaustiveness
         // this exists for, and would need a null in each branch that does not apply.
-        return await _parser.Parse(message.Body).Match(
-            whenParsed: value => ProcessEventAsync(message, metrics, started, value.Event, cancellationToken),
+        var result = await Parse(message.Body).Match(
+            whenParsed: value =>
+                ProcessEventAsync(message, metrics, started, value.Event, span, cancellationToken),
             whenMalformed: malformed =>
                 Task.FromResult(ParseFailed(message, metrics, started, malformed.Reason)),
             whenUnsupportedSchemaVersion: _ =>
                 Task.FromResult(ParseFailed(
                     message, metrics, started, ParseFailureReason.UnsupportedSchemaVersion)))
             .ConfigureAwait(false);
+
+        Describe(span, result);
+
+        return result;
+    }
+
+    /// <remarks>
+    /// The span wraps the parser rather than the whole branch, because the branch includes the work
+    /// that follows a successful parse and a span named for parsing should not cover persistence.
+    /// </remarks>
+    private ParseResult Parse(string body)
+    {
+        using var span = Tracing.Source.StartActivity(Tracing.Spans.Parse);
+
+        return _parser.Parse(body);
+    }
+
+    /// <inheritdoc cref="Parse"/>
+    private ValidationResult Validate(OrderCreatedV1 orderEvent)
+    {
+        using var span = Tracing.Source.StartActivity(Tracing.Spans.Validate);
+
+        return _validator.Validate(orderEvent);
+    }
+
+    /// <remarks>
+    /// Traced despite being the one step here that touches nothing outside the process. Canonical
+    /// hashing re-serialises the event, and a latency distribution that shows it growing with payload
+    /// size is the evidence a future change to the canonical form would need.
+    /// </remarks>
+    private PayloadHashes Hash(OrderCreatedV1 orderEvent)
+    {
+        using var span = Tracing.Source.StartActivity(Tracing.Spans.Hash);
+
+        return _hasher.ComputeHashes(orderEvent);
+    }
+
+    /// <remarks>
+    /// Each value is written only when it is there. This runs on the parser's output, so an event that
+    /// is about to fail validation can be missing any of them, and an attribute set to null is a
+    /// removal rather than an empty value.
+    /// </remarks>
+    private static void Identify(Activity? span, OrderCreatedV1 orderEvent)
+    {
+        if (span is null)
+        {
+            return;
+        }
+
+        span.SetTag(Tracing.Attributes.EventId, Identifier(orderEvent.EventId));
+        span.SetTag(Tracing.Attributes.OrderId, OrderIdentifier(orderEvent.Data?.OrderId));
+        span.SetTag(Tracing.Attributes.CorrelationId, Identifier(orderEvent.CorrelationId));
+    }
+
+    /// <summary>
+    /// Records what the record concluded on its span.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One place rather than one per terminal branch, because the result already carries both values
+    /// and the branches would otherwise each have to remember to annotate. The vocabulary is the
+    /// logs': the same outcome names and the same fixed reason strings, so a trace and a log line
+    /// about one record agree rather than describing it in two dialects.
+    /// </para>
+    /// <para>
+    /// The status is set from whether the record is being returned, not from whether it succeeded. A
+    /// duplicate is neither an error nor worth marking as one — the mechanism worked — while a
+    /// conflict, an invalid event and a transient fault are all things an operator searching for
+    /// errored spans should find.
+    /// </para>
+    /// </remarks>
+    private static void Describe(Activity? span, MessageProcessingResult result)
+    {
+        if (span is null)
+        {
+            return;
+        }
+
+        span.SetTag(Tracing.Attributes.Outcome, result.Outcome.ToString());
+
+        if (result.Reason is not null)
+        {
+            span.SetTag(Tracing.Attributes.Reason, result.Reason);
+        }
+
+        span.SetStatus(
+            result.ShouldReportAsFailure ? ActivityStatusCode.Error : ActivityStatusCode.Ok,
+            result.Reason);
     }
 
     /// <remarks>
@@ -115,6 +212,7 @@ public sealed class OrderMessageProcessor : IOrderMessageProcessor
         IInvocationMetrics metrics,
         long started,
         OrderCreatedV1 orderEvent,
+        Activity? span,
         CancellationToken cancellationToken)
     {
         // Every value here comes from parsing, not validation, so any of them can be absent: this type
@@ -127,14 +225,20 @@ public sealed class OrderMessageProcessor : IOrderMessageProcessor
             OrderIdentifier(orderEvent.Data?.OrderId),
             Identifier(orderEvent.CorrelationId));
 
-        var validation = _validator.Validate(orderEvent);
+        // The same three identifiers the log scope just took, on the record's span. Written here
+        // rather than by the transport because they exist only once a body has parsed, and written as
+        // attributes rather than as a span name because a name carrying an identifier makes every
+        // aggregate view one row per order.
+        Identify(span, orderEvent);
+
+        var validation = Validate(orderEvent);
 
         if (!validation.IsValid)
         {
             return ValidationFailed(message, metrics, started, validation);
         }
 
-        var hashes = _hasher.ComputeHashes(orderEvent);
+        var hashes = Hash(orderEvent);
 
         var written = await _store.TryCreateAsync(orderEvent, hashes, cancellationToken).ConfigureAwait(false);
 

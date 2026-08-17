@@ -26,6 +26,15 @@
       Lambda; see LoggingConfiguration.
     -->
     <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+    <!--
+      The OpenTelemetry SDK is a hosting decision for the same reason. Spans are started from
+      ActivitySource in Core and Aws, which is in the framework; these turn them into exported
+      telemetry. See TracingConfiguration.
+    -->
+    <PackageReference Include="OpenTelemetry" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Extensions.AWS" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AWS" />
   </ItemGroup>
 
 </Project>

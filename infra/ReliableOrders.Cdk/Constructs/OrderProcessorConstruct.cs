@@ -1,5 +1,6 @@
 using System.Globalization;
 using Amazon.CDK;
+using Amazon.CDK.AWS.IAM;
 using Amazon.CDK.AWS.Lambda;
 using Amazon.CDK.AWS.Lambda.EventSources;
 using Amazon.CDK.AWS.Logs;
@@ -79,6 +80,14 @@ public sealed class OrderProcessorConstruct : Construct
             Runtime = new Runtime(config.LambdaRuntimeIdentifier, RuntimeFamily.DOTNET_CORE),
             Handler = Handler,
             Code = code,
+
+            // Stated rather than left to CDK's x86_64 default, because it is half of a pair. The
+            // collector layer below is published per architecture, so this value and that ARN have to
+            // agree — and a disagreement fails when the extension initialises in the deployed
+            // environment, long after a synthesis that succeeded. A CDK assertion holds the pair
+            // together; changing this alone fails it, naming the layer.
+            Architecture = ProcessorArchitecture,
+
             MemorySize = config.LambdaMemoryMb,
             Timeout = Duration.Seconds(config.LambdaTimeoutSeconds),
             ReservedConcurrentExecutions = config.ReservedConcurrency,
@@ -98,9 +107,25 @@ public sealed class OrderProcessorConstruct : Construct
             Tracing = Tracing.DISABLED,
 
             Environment = Variables(config, persistence),
+
+            // The collector the function exports OTLP to. It runs in the execution environment beside
+            // the function and forwards to X-Ray, which is what keeps the export off the record path:
+            // the SDK hands spans to a local process rather than calling an AWS API inside the
+            // invocation.
+            Layers = [CollectorLayer(this)],
         });
 
         persistence.GrantOrderTransaction(Function.Role!);
+
+        // The collector writes the traces, so the function's role is what needs the permission. Both
+        // actions are unscoped because X-Ray defines no resource for them — the API takes segments,
+        // not a resource ARN — so a resource-scoped statement is not available to write. That is the
+        // one exception to the resource-scoping rule in docs/security.md, and it is recorded there.
+        Function.AddToRolePolicy(new PolicyStatement(new PolicyStatementProps
+        {
+            Actions = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"],
+            Resources = ["*"],
+        }));
 
         // The event source grants the consume permissions itself, which is why the role is not given
         // queue actions above.
@@ -123,6 +148,67 @@ public sealed class OrderProcessorConstruct : Construct
 
     /// <summary>The function the event source invokes.</summary>
     public IFunction Function { get; }
+
+    /// <summary>
+    /// The architecture the function deploys as, which the collector layer is chosen to match.
+    /// </summary>
+    /// <remarks>
+    /// Named once and used twice — on the function and in the layer's name — so the two cannot drift
+    /// silently. It is not derived from the layer string or the other way round: the arm64 collector is
+    /// a separate publication and switching architecture is a deliberate change to both, not a
+    /// substitution one place can make on the other's behalf.
+    /// </remarks>
+    private static readonly Architecture ProcessorArchitecture = Architecture.X86_64;
+
+    /// <summary>
+    /// The AWS account that publishes the ADOT Lambda layers.
+    /// </summary>
+    /// <remarks>
+    /// AWS's own, and the same in every commercial Region. The layer is a regional resource, so the
+    /// ARN is composed against the stack's Region rather than written out.
+    /// </remarks>
+    private const string AdotPublisherAccount = "901920570463";
+
+    /// <summary>
+    /// The collector layer, pinned to a version.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The collector alone, not one of the language layers. Those exist to auto-instrument, and the
+    /// observability specification is explicit that auto-instrumentation on Lambda is far weaker for
+    /// .NET than for other runtimes — this service therefore instruments itself and needs only
+    /// somewhere to send the result. The corollary is that <c>AWS_LAMBDA_EXEC_WRAPPER</c> is
+    /// deliberately not set: it points at the auto-instrumentation entry script, which this function
+    /// must not run.
+    /// </para>
+    /// <para>
+    /// <c>amd64</c>, which is the layer published for the x86_64 in
+    /// <see cref="ProcessorArchitecture"/>. There is an arm64 layer, and picking the wrong one fails
+    /// when the extension initialises rather than at synthesis — so the two move together or not at
+    /// all, and a CDK assertion over the pair is what makes that more than an instruction.
+    /// </para>
+    /// <para>
+    /// Pinned to a version for the reason the container images are: an unpinned layer changes what
+    /// runs beside the function without a deployment. Unlike an image digest, nothing here can verify
+    /// the ARN exists — a wrong version is rejected at deploy, not at synthesis.
+    /// </para>
+    /// </remarks>
+    private const string AdotCollectorLayer = "aws-otel-collector-amd64-ver-0-151-0:1";
+
+    /// <remarks>
+    /// Scoped to the construct rather than to its parent, so the layer is a child of the thing that
+    /// uses it. Under the parent, a second processor construct in one stack collides on the logical
+    /// identifier at synthesis, and this construct leaks a child into a scope it does not own.
+    /// </remarks>
+    private static ILayerVersion CollectorLayer(Construct scope)
+    {
+        var stack = Stack.Of(scope);
+
+        return LayerVersion.FromLayerVersionArn(
+            scope,
+            "AdotCollectorLayer",
+            $"arn:{stack.Partition}:lambda:{stack.Region}:{AdotPublisherAccount}:layer:{AdotCollectorLayer}");
+    }
 
     /// <summary>
     /// The environment the function reads at cold start.

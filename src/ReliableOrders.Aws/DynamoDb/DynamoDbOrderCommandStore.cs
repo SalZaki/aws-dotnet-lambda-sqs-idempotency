@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Runtime;
 using ReliableOrders.Core.Contracts;
 using ReliableOrders.Core.Idempotency;
+using ReliableOrders.Core.Observability;
 using ReliableOrders.Core.Persistence;
 
 namespace ReliableOrders.Aws.DynamoDb;
@@ -60,6 +62,13 @@ public sealed class DynamoDbOrderCommandStore : IOrderCommandStore
             new OrderWriteRequest(message, hashes, _retention),
             _tables);
 
+        // A client span covering the transaction and whatever the SDK instrumentation records inside
+        // it. No outcome is written here: every branch below returns a result the processor already
+        // puts on the record's span, and duplicating it would leave two places to change when the
+        // vocabulary does. What this span adds is the boundary — how long the write took, and that it
+        // was a call out of the process rather than work done in it.
+        using var span = Tracing.Source.StartActivity(Tracing.Spans.Persist, ActivityKind.Client);
+
         try
         {
             await _client.TransactWriteItemsAsync(request, cancellationToken);
@@ -76,9 +85,16 @@ public sealed class DynamoDbOrderCommandStore : IOrderCommandStore
         }
         catch (TransactionCanceledException cancellation)
         {
+            // The write is over, so its span ends before classification begins. Left running, the
+            // persist span would enclose the classify span and its duration would include the
+            // classifier's — so a latency alarm on persist would fire on classifier slowness, on
+            // exactly the conflict path where the two most need telling apart. Disposal is idempotent,
+            // so the using below still runs and still does the right thing.
+            span?.Dispose();
+
             // Classified from the reasons the response already carries. No follow-up read: it would
             // cost a round trip on the commonest retry path and let the row change in between.
-            return TransactionCancellationClassifier.Classify(cancellation, hashes);
+            return Classify(cancellation, hashes);
         }
         catch (ItemCollectionSizeLimitExceededException)
         {
@@ -131,6 +147,41 @@ public sealed class DynamoDbOrderCommandStore : IOrderCommandStore
         {
             return new OrderWriteResult.TransientFault(WriteFailureReason.ServiceUnavailable);
         }
+    }
+
+    /// <summary>
+    /// Classifies a cancelled transaction, under a span of its own.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Separated from the persist span because the two answer different questions. Persist says how
+    /// long DynamoDB took; this says how long was spent deciding what its refusal meant, and it is the
+    /// step whose correctness this whole project is about. A conflict investigated months from now is
+    /// findable by this span and the scope it carries.
+    /// </para>
+    /// <para>
+    /// The scope is the only attribute, and it is absent for the outcomes that have none. Nothing here
+    /// records the stored item or the hash that disagreed: a conflict is diagnosed from the computed
+    /// hash on the log line, which is redacted for that purpose, and copying it onto a span would put
+    /// it in a second system under different retention.
+    /// </para>
+    /// </remarks>
+    private static OrderWriteResult Classify(TransactionCanceledException cancellation, PayloadHashes hashes)
+    {
+        using var span = Tracing.Source.StartActivity(Tracing.Spans.Classify);
+
+        var result = TransactionCancellationClassifier.Classify(cancellation, hashes);
+
+        span?.SetTag(
+            Tracing.Attributes.Scope,
+            result.Match(
+                whenCreated: _ => (string?)null,
+                whenDuplicate: duplicate => duplicate.Scope.ToString(),
+                whenConflict: conflict => conflict.Scope.ToString(),
+                whenTransientFault: _ => null,
+                whenPermanentFault: _ => null));
+
+        return result;
     }
 
     /// <summary>

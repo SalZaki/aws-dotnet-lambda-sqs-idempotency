@@ -57,6 +57,17 @@ public sealed record IncomingMessage(
     /// <inheritdoc cref="MessageId"/>
     public int ApproximateReceiveCount { get; } = AtLeastFirstDelivery(ApproximateReceiveCount);
 
+    /// <inheritdoc cref="IncomingMessage(string, string, int, IReadOnlyDictionary{string, string})"/>
+    /// <remarks>
+    /// Enforced for the same reason as the two above, and this is the one whose absence costs the most.
+    /// The transport starts the record's span from these attributes before the per-record try begins, so
+    /// a null here does not become one record's failure — it leaves the handler as an exception, fails
+    /// the invocation, and has SQS redeliver every record in the batch including those already
+    /// committed. A message carrying no attributes arrives with an empty dictionary, which is what a
+    /// publisher that does not propagate produces and what the mapper builds for one.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> Attributes { get; } = Present(Attributes);
+
     private static string Required(string messageId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
@@ -69,5 +80,17 @@ public sealed record IncomingMessage(
         ArgumentOutOfRangeException.ThrowIfLessThan(approximateReceiveCount, 1);
 
         return approximateReceiveCount;
+    }
+
+    /// <remarks>
+    /// Rejected rather than replaced with an empty set. A caller with no attributes to carry says so by
+    /// passing an empty dictionary, and quietly accepting a null would make the two indistinguishable
+    /// here while hiding the defect from the caller that has it.
+    /// </remarks>
+    private static IReadOnlyDictionary<string, string> Present(IReadOnlyDictionary<string, string> attributes)
+    {
+        ArgumentNullException.ThrowIfNull(attributes);
+
+        return attributes;
     }
 }

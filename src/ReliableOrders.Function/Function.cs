@@ -2,6 +2,7 @@ using Amazon.Lambda.Core;
 using Amazon.Lambda.Serialization.SystemTextJson;
 using Amazon.Lambda.SQSEvents;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry.Trace;
 using ReliableOrders.Aws.Sqs;
 using ReliableOrders.Function.Serialization;
 
@@ -34,6 +35,18 @@ public sealed class Function
 
     private readonly SqsBatchHandler _handler;
     private readonly TimeProvider _clock;
+    private readonly TracerProvider? _tracer;
+
+    /// <summary>
+    /// How long the end-of-invocation flush is given.
+    /// </summary>
+    /// <remarks>
+    /// The collector is in the same execution environment, so a healthy flush is nothing like this
+    /// long. The bound is for the unhealthy case: a collector that is not listening must not hold the
+    /// invocation open, and the deadline margin this eats into exists for exactly this kind of
+    /// shutdown work.
+    /// </remarks>
+    private const int FlushTimeoutMilliseconds = 500;
 
     /// <summary>
     /// Constructed by the runtime, once per execution environment.
@@ -44,7 +57,8 @@ public sealed class Function
     public Function()
         : this(
             Services.Value.GetRequiredService<SqsBatchHandler>(),
-            Services.Value.GetRequiredService<TimeProvider>())
+            Services.Value.GetRequiredService<TimeProvider>(),
+            Services.Value.GetRequiredService<TracerProvider>())
     {
     }
 
@@ -59,13 +73,19 @@ public sealed class Function
     /// now with a real-clock instant, and a remaining time of zero would defer nothing while the test
     /// asserted that it had.
     /// </param>
-    public Function(SqsBatchHandler handler, TimeProvider clock)
+    /// <param name="tracer">
+    /// Flushed at the end of every invocation, or null in a test that is not about tracing. Optional
+    /// because it is the one dependency here whose absence changes nothing an assertion would read:
+    /// the spans are still started, and a test with no exporter has nothing to flush.
+    /// </param>
+    public Function(SqsBatchHandler handler, TimeProvider clock, TracerProvider? tracer = null)
     {
         ArgumentNullException.ThrowIfNull(handler);
         ArgumentNullException.ThrowIfNull(clock);
 
         _handler = handler;
         _clock = clock;
+        _tracer = tracer;
     }
 
     /// <summary>
@@ -79,7 +99,7 @@ public sealed class Function
     /// <param name="batch">The event as the runtime deserialised it.</param>
     /// <param name="context">The invocation, for its request identifier and remaining time.</param>
     /// <returns>The records to redeliver, by SQS message identifier.</returns>
-    public Task<SQSBatchResponse> HandleAsync(SQSEvent batch, ILambdaContext context)
+    public async Task<SQSBatchResponse> HandleAsync(SQSEvent batch, ILambdaContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -87,8 +107,18 @@ public sealed class Function
             context.AwsRequestId,
             ProcessingDeadline.From(_clock.GetUtcNow(), context.RemainingTime));
 
-        // No cancellation token exists at this boundary — the runtime offers none, and the deadline is
-        // how this function stops itself. See BatchInvocation.
-        return _handler.HandleAsync(batch, invocation, CancellationToken.None);
+        try
+        {
+            // No cancellation token exists at this boundary — the runtime offers none, and the
+            // deadline is how this function stops itself. See BatchInvocation.
+            return await _handler.HandleAsync(batch, invocation, CancellationToken.None);
+        }
+        finally
+        {
+            // Flushed here because this is the last line that runs before Lambda freezes the execution
+            // environment, and a frozen environment stops the exporter's worker thread mid-batch. In a
+            // finally, so an invocation that throws still ships the spans explaining why.
+            _tracer?.ForceFlush(FlushTimeoutMilliseconds);
+        }
     }
 }

@@ -45,6 +45,16 @@
     when the token was cancelled, and a client-side timeout is not misclassified as cancellation when
     it was not.
 30. Persisted timestamps derive from `occurredAtUtc`, not from `TimeProvider`.
+31. A record produces one `Consumer` span carrying the message identifier, the receive count and the
+    invocation identifier.
+32. A publisher's W3C trace context becomes the record span's parent and is marked remote; an absent
+    or malformed one produces a root span rather than a failure.
+33. A record deferred at the processing deadline produces no span.
+34. Parsing, validation, hashing, persistence and classification are each their own span, and a step
+    that never ran produces none.
+35. Span outcome and status use the log vocabulary, a duplicate is not an error, and a record whose
+    processing throws is still marked errored.
+36. Span attributes carry no customer identifier, amount, item description or body.
 
 ### Coverage of the required cases
 
@@ -83,6 +93,12 @@ than in an issue so the plan and its status cannot drift apart.
 | 28 | `EmbeddedMetricsPublisherTests`, across five deliveries and over the shape of `IInvocationMetrics` |
 | 29 | `DynamoDbOrderCommandStoreTests`, over three cases — the token is forwarded, a wrapped cancellation propagates when the token is cancelled, and a wrapped client timeout returns `TransientFault` when it is not. `OrderMessageProcessorTests` covers the same forwarding one layer up |
 | 30 | `OrderWriteRequestTests`, `OrderCommandStoreTests` |
+| 31 | `TracingTests`, over the whole attribute set of a record span |
+| 32 | `TracingTests`, over a propagated context and its remote flag, an absent one, and three malformed headers |
+| 33 | `TracingTests`, asserting no span exists for the deferred record |
+| 34 | `TracingTests` for parse, validate and hash; `DynamoDbOrderCommandStoreTests` for persist and classify, which the store owns, including that the two are siblings rather than nested |
+| 35 | `TracingTests`, over a processed record, a duplicate, the status of an invalid one, and the path where processing throws |
+| 36 | `TracingTests`, which pins the attribute set at each layer that writes one rather than checking for known-bad values |
 
 Every case above is covered. Cases 19 to 28 were listed here as outstanding while the components they
 describe were still to be written, which is what a plan is for; the column now names a test for each
@@ -226,6 +242,9 @@ is added next.
 - Lambda timeout, memory, and concurrency are configured.
 - X-Ray active tracing is disabled (see [Tracing
   Specification](observability.md#tracing-specification)).
+- The ADOT collector layer is attached and pinned to a version.
+- `AWS_LAMBDA_EXEC_WRAPPER` is absent, so no auto-instrumentation starts.
+- The execution role holds the two X-Ray write actions.
 - IAM permissions are resource-scoped.
 - Log retention is explicit.
 - DynamoDB TTL is enabled on `ExpirationEpochSeconds`.

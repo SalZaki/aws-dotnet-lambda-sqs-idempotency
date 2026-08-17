@@ -94,6 +94,17 @@ the layering rule in the [Repository Structure](#repository-structure) section a
 test in the Optional
 Quality Tests section.
 
+The type enforces its own invariants rather than leaving them to the mapper. A blank `MessageId`, a
+delivery count below the first delivery, and a missing attribute set are all rejected at
+construction. A shape checked only where SQS records are mapped holds for records that arrived from
+SQS and for nothing else, and every other producer — a quarantine replay, a fixture, a second
+transport — reaches the processor through this constructor. `Attributes` is the one whose absence
+costs the most: the transport starts a record's span from it before the per-record `try` opens, so a
+null there fails the invocation and redelivers the whole batch rather than becoming one record's
+failure. A message carrying no attributes says so with an empty set. `Body` is the one value with a
+stated fallback instead of a check — an absent body and an empty one are the same thing to the
+parser.
+
 ### `OrderEventParser`
 
 #### Responsibilities

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Amazon.Lambda.SQSEvents;
 using ReliableOrders.Aws.Telemetry;
 using ReliableOrders.Core.Observability;
@@ -145,6 +146,16 @@ public sealed class SqsBatchHandler
             return Defer(message, invocation, metrics);
         }
 
+        // Started after the deadline check, so a deferred record produces no span. It was never
+        // attempted, and a span saying otherwise would put a zero-length process step in the
+        // publisher's trace for work this invocation declined to do. The deferral is reported as a log
+        // event and a metric, which is where a deferral belongs.
+        //
+        // Disposed at the end of the record either way, including when the processor throws, which is
+        // what the using gives us — an undisposed activity is never exported and the record would
+        // vanish from the trace exactly when something went wrong.
+        using var span = RecordTrace.Start(message, invocation.LambdaRequestId);
+
         var started = _clock.GetTimestamp();
 
         try
@@ -163,6 +174,12 @@ public sealed class SqsBatchHandler
         // record's failure.
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // Errored, with no outcome attribute. The record reached none — the invocation ended
+            // underneath it — and inventing a value outside the fixed vocabulary to fill the gap would
+            // put a word in traces that no log line or metric ever uses. The status alone says the
+            // record was abandoned, which is what happened.
+            span?.SetStatus(ActivityStatusCode.Error, "the invocation ended before the record finished");
+
             throw;
         }
 #pragma warning disable CA1031 // One record's defect may not decide the other nine's outcome.
@@ -186,6 +203,14 @@ public sealed class SqsBatchHandler
 
             _log.TransientProcessingFailure(WriteFailureReason.ServiceUnavailable, duration);
             metrics.TransientFailure(duration);
+
+            // Marked here because the processor never got to. It writes the outcome after the work
+            // returns, and this path is the work not returning — so without this the record that
+            // failed for an unexplained reason is the one span an operator filtering for errors would
+            // not find, while the log line and the metric both call it a failure.
+            span?.SetTag(Tracing.Attributes.Outcome, nameof(MessageProcessingOutcome.TransientFailure));
+            span?.SetTag(Tracing.Attributes.Reason, WriteFailureReason.ServiceUnavailable);
+            span?.SetStatus(ActivityStatusCode.Error, WriteFailureReason.ServiceUnavailable);
 
             return message.MessageId;
         }
