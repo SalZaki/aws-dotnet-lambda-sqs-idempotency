@@ -79,9 +79,11 @@ public sealed record EnvironmentConfig
         int dlqRetentionDays,
         int idempotencyRetentionDays,
         bool retainData,
-        bool enablePointInTimeRecovery)
+        bool enablePointInTimeRecovery,
+        AlarmThresholds alarmThresholds)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(environmentName);
+        ArgumentNullException.ThrowIfNull(alarmThresholds);
         ArgumentException.ThrowIfNullOrWhiteSpace(lambdaRuntimeIdentifier);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(lambdaMemoryMb);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(lambdaTimeoutSeconds);
@@ -154,6 +156,30 @@ public sealed record EnvironmentConfig
                 nameof(maxReceiveCount));
         }
 
+        // The two alarm thresholds that are only meaningful against values outside AlarmThresholds.
+        // Both describe an alarm that deploys cleanly and then fires on the system behaving correctly,
+        // which is the failure mode that trains an operator to ignore it.
+        var visibilityTimeoutSeconds =
+            VisibilityTimeoutFor(lambdaTimeoutSeconds, batchWindowSeconds, visibilityMarginSeconds);
+
+        if (alarmThresholds.OldestMessageAgeSeconds <= visibilityTimeoutSeconds)
+        {
+            throw new ArgumentException(
+                $"Oldest-message-age threshold {alarmThresholds.OldestMessageAgeSeconds} seconds does not "
+                + $"exceed the visibility timeout of {visibilityTimeoutSeconds} seconds. A message waiting "
+                + "out one visibility timeout after a failed receive is the retry path working.",
+                nameof(alarmThresholds));
+        }
+
+        if (alarmThresholds.TransientFailuresPerFiveMinutes <= maxReceiveCount)
+        {
+            throw new ArgumentException(
+                $"Transient-failure threshold {alarmThresholds.TransientFailuresPerFiveMinutes} does not "
+                + $"exceed the maximum receive count {maxReceiveCount}. One message exhausting its retries "
+                + "emits one sample per attempt, so the alarm would fire on a single poison message.",
+                nameof(alarmThresholds));
+        }
+
         EnvironmentName = environmentName;
         LambdaRuntimeIdentifier = lambdaRuntimeIdentifier;
         LambdaMemoryMb = lambdaMemoryMb;
@@ -169,6 +195,7 @@ public sealed record EnvironmentConfig
         IdempotencyRetentionDays = idempotencyRetentionDays;
         RetainData = retainData;
         EnablePointInTimeRecovery = enablePointInTimeRecovery;
+        AlarmThresholds = alarmThresholds;
     }
 
     /// <summary>
@@ -190,7 +217,8 @@ public sealed record EnvironmentConfig
         dlqRetentionDays: 14,
         idempotencyRetentionDays: 30,
         retainData: false,
-        enablePointInTimeRecovery: false);
+        enablePointInTimeRecovery: false,
+        alarmThresholds: AlarmThresholds.Development);
 
     /// <summary>Names the deployment. It tags every resource and suffixes every queue.</summary>
     public string EnvironmentName { get; }
@@ -237,6 +265,9 @@ public sealed record EnvironmentConfig
     /// <summary>Whether the tables carry point-in-time recovery.</summary>
     public bool EnablePointInTimeRecovery { get; }
 
+    /// <summary>The numbers the alarms are built from.</summary>
+    public AlarmThresholds AlarmThresholds { get; }
+
     /// <summary>
     /// How long a received message stays invisible to other receivers.
     /// </summary>
@@ -245,7 +276,23 @@ public sealed record EnvironmentConfig
     /// does not read as a change to the AWS guidance the multiplier represents.
     /// </remarks>
     public int VisibilityTimeoutSeconds =>
-        (VisibilityTimeoutMultiplier * LambdaTimeoutSeconds) + BatchWindowSeconds + VisibilityMarginSeconds;
+        VisibilityTimeoutFor(LambdaTimeoutSeconds, BatchWindowSeconds, VisibilityMarginSeconds);
+
+    /// <summary>
+    /// The formula behind <see cref="VisibilityTimeoutSeconds"/>, in a form the constructor can call.
+    /// </summary>
+    /// <remarks>
+    /// The constructor needs the timeout to check the oldest-message-age threshold against it, before
+    /// the fields the property reads have been assigned. Written once rather than twice so that a
+    /// change to the margin or the multiplier cannot leave the check validating against a timeout the
+    /// stack does not deploy — a divergence no test would catch, since each compares the property
+    /// against itself.
+    /// </remarks>
+    private static int VisibilityTimeoutFor(
+        int lambdaTimeoutSeconds,
+        int batchWindowSeconds,
+        int visibilityMarginSeconds) =>
+        (VisibilityTimeoutMultiplier * lambdaTimeoutSeconds) + batchWindowSeconds + visibilityMarginSeconds;
 
     /// <summary>
     /// Returns the configuration for a named environment.

@@ -56,6 +56,15 @@ public sealed class ReliableOrdersStack : Stack
         var persistence = new PersistenceConstruct(this, "Persistence", config);
         var processor = new OrderProcessorConstruct(this, "Processor", config, code, messaging, persistence);
 
+        // Last, because every widget names something one of the three above owns.
+        var observability = new ObservabilityConstruct(
+            this,
+            "Observability",
+            config,
+            messaging,
+            persistence,
+            processor);
+
         // Both URLs are output because both are operational inputs. The publisher sends to one, and
         // the redrive runbook opens with the other.
         _ = new CfnOutput(this, "SourceQueueUrl", new CfnOutputProps
@@ -88,6 +97,14 @@ public sealed class ReliableOrdersStack : Stack
         {
             Value = processor.Function.FunctionName,
             Description = "The function the event source invokes.",
+        });
+
+        // Output because the runbooks open with it, and the name carries the environment suffix rather
+        // than being the same in every account.
+        _ = new CfnOutput(this, "DashboardName", new CfnOutputProps
+        {
+            Value = observability.Dashboard.DashboardName,
+            Description = "The operator dashboard for this environment.",
         });
     }
 }

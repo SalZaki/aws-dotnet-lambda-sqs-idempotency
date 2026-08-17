@@ -207,5 +207,6 @@ public sealed class PersistenceConstructTests
         dlqRetentionDays: 14,
         idempotencyRetentionDays: 30,
         retainData: retainData,
-        enablePointInTimeRecovery: pointInTimeRecovery);
+        enablePointInTimeRecovery: pointInTimeRecovery,
+        alarmThresholds: AlarmThresholds.Development);
 }

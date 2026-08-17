@@ -28,7 +28,13 @@ public sealed class EnvironmentConfigTests
     [Fact]
     public void The_visibility_timeout_follows_the_function_timeout_window_and_margin()
     {
-        var config = Config(lambdaTimeoutSeconds: 45, batchWindowSeconds: 2, visibilityMarginSeconds: 30);
+        // The raised timeout carries the oldest-message-age threshold with it. Leaving the default 300
+        // against this 302 would fail the pairing rule rather than the assertion below.
+        var config = Config(
+            lambdaTimeoutSeconds: 45,
+            batchWindowSeconds: 2,
+            visibilityMarginSeconds: 30,
+            alarmThresholds: Thresholds(oldestMessageAgeSeconds: 600));
 
         Assert.Equal((6 * 45) + 2 + 30, config.VisibilityTimeoutSeconds);
     }
@@ -163,6 +169,97 @@ public sealed class EnvironmentConfigTests
     }
 
     /// <summary>
+    /// The oldest-message-age threshold has to clear the visibility timeout it is measured beside.
+    /// </summary>
+    /// <remarks>
+    /// Equal is rejected as well as shorter, for the reason the retention rule rejects equal: a message
+    /// that failed one receive and is waiting out its visibility timeout has aged exactly that far
+    /// while behaving correctly. The development pairing is 300 against 210.
+    /// </remarks>
+    [Theory]
+    [InlineData(210)]
+    [InlineData(120)]
+    public void An_oldest_message_age_threshold_within_the_visibility_timeout_is_rejected(int seconds)
+    {
+        var exception = Assert.Throws<ArgumentException>(
+            () => Config(alarmThresholds: Thresholds(oldestMessageAgeSeconds: seconds)));
+
+        Assert.Contains(
+            seconds.ToString(CultureInfo.InvariantCulture),
+            exception.Message,
+            StringComparison.Ordinal);
+
+        Assert.Contains("210", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The transient-failure threshold has to clear the retries one message is allowed.
+    /// </summary>
+    /// <remarks>
+    /// Transient failures are not gated on first receipt, so a single poison message emits one sample
+    /// per attempt and a threshold at the receive count turns that message into an alarm. Equal is the
+    /// value someone reaches by reading the two numbers as the same quantity.
+    /// </remarks>
+    [Theory]
+    [InlineData(5)]
+    [InlineData(3)]
+    public void A_transient_failure_threshold_within_the_receive_count_is_rejected(int failures)
+    {
+        var exception = Assert.Throws<ArgumentException>(
+            () => Config(
+                maxReceiveCount: 5,
+                alarmThresholds: Thresholds(transientFailuresPerFiveMinutes: failures)));
+
+        Assert.Contains(
+            failures.ToString(CultureInfo.InvariantCulture),
+            exception.Message,
+            StringComparison.Ordinal);
+
+        Assert.Contains("5", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The development thresholds satisfy both rules, so the defaults are not a combination the record
+    /// would refuse.
+    /// </summary>
+    [Fact]
+    public void The_development_thresholds_clear_both_cross_value_rules()
+    {
+        var config = EnvironmentConfig.Development;
+
+        Assert.True(config.AlarmThresholds.OldestMessageAgeSeconds > config.VisibilityTimeoutSeconds);
+        Assert.True(config.AlarmThresholds.TransientFailuresPerFiveMinutes > config.MaxReceiveCount);
+    }
+
+    /// <summary>
+    /// A threshold of zero deploys an alarm that cannot distinguish a fault from an idle queue.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void A_threshold_that_is_not_positive_is_rejected(int value)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => Thresholds(deadlineDeferralsPerFiveMinutes: value));
+    }
+
+    /// <summary>
+    /// The development thresholds with one value replaced, so each case states only what it is about.
+    /// </summary>
+    private static AlarmThresholds Thresholds(
+        int oldestMessageAgeSeconds = 300,
+        int throttleEvaluationMinutes = 3,
+        int transientFailuresPerFiveMinutes = 10,
+        int noProgressMinutes = 15,
+        int deadlineDeferralsPerFiveMinutes = 1) =>
+        new(
+            oldestMessageAgeSeconds: oldestMessageAgeSeconds,
+            throttleEvaluationMinutes: throttleEvaluationMinutes,
+            transientFailuresPerFiveMinutes: transientFailuresPerFiveMinutes,
+            noProgressMinutes: noProgressMinutes,
+            deadlineDeferralsPerFiveMinutes: deadlineDeferralsPerFiveMinutes);
+
+    /// <summary>
     /// The development defaults with one or two values replaced, so each case states only what it is
     /// about.
     /// </summary>
@@ -175,7 +272,8 @@ public sealed class EnvironmentConfigTests
         int visibilityMarginSeconds = 29,
         int maxReceiveCount = 5,
         int sourceRetentionDays = 4,
-        int dlqRetentionDays = 14) =>
+        int dlqRetentionDays = 14,
+        AlarmThresholds? alarmThresholds = null) =>
         new(
             environmentName: "dev",
             lambdaRuntimeIdentifier: "dotnet10",
@@ -191,5 +289,6 @@ public sealed class EnvironmentConfigTests
             dlqRetentionDays: dlqRetentionDays,
             idempotencyRetentionDays: 30,
             retainData: false,
-            enablePointInTimeRecovery: false);
+            enablePointInTimeRecovery: false,
+            alarmThresholds: alarmThresholds ?? Thresholds());
 }
