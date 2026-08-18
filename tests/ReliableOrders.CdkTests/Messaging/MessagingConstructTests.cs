@@ -39,6 +39,11 @@ public sealed class MessagingConstructTests
         deadlineDeferralsPerFiveMinutes: 1);
 
     /// <summary>
+    /// Any well-formed address; these cases assert on resources, not on delivery.
+    /// </summary>
+    private const string AlarmEndpoint = "alerts@reliable-orders.invalid";
+
+    /// <summary>
     /// The formula from docs/infrastructure.md, recomputed here from the values the construct was
     /// given.
     /// </summary>
@@ -236,5 +241,6 @@ public sealed class MessagingConstructTests
         idempotencyRetentionDays: 30,
         retainData: retainData,
         enablePointInTimeRecovery: false,
-        alarmThresholds: AlarmThresholds);
+        alarmThresholds: AlarmThresholds,
+        alarmEndpoint: AlarmEndpoint);
 }

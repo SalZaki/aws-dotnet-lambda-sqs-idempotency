@@ -166,6 +166,159 @@ public sealed class ObservabilityConstructTests
         Assert.NotEmpty(Template().FindOutputs("DashboardName"));
     }
 
+    /// <summary>
+    /// Every alarm docs/observability.md requires is declared, by the name it carries.
+    /// </summary>
+    /// <remarks>
+    /// The composite is the eighth and is a different CloudFormation type, so it is asserted below
+    /// rather than here. The two alarms it is built from are legs rather than entries in the list.
+    /// </remarks>
+    [Theory]
+    [InlineData("DeadLetterQueueNotEmpty")]
+    [InlineData("IdempotencyConflicts")]
+    [InlineData("SourceQueueBacklog")]
+    [InlineData("FunctionThrottled")]
+    [InlineData("TransientFailures")]
+    [InlineData("TableThrottlingOrErrors")]
+    [InlineData("DeadlineDeferrals")]
+    public void The_specified_alarm_is_declared(string name)
+    {
+        Assert.Contains(
+            $"reliable-orders-{EnvironmentConfig.Development.EnvironmentName}-{name}",
+            AlarmNames(),
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// The thresholds an alarm deploys with are the configured ones.
+    /// </summary>
+    /// <remarks>
+    /// Read off the template against the configuration, so a threshold hard-coded in the construct
+    /// fails here. Three of the five are checked; the other two are evaluation-period counts, covered
+    /// by the case below.
+    /// </remarks>
+    [Fact]
+    public void The_alarm_thresholds_are_the_configured_ones()
+    {
+        var thresholds = EnvironmentConfig.Development.AlarmThresholds;
+
+        Assert.Equal(thresholds.OldestMessageAgeSeconds, Threshold("SourceQueueBacklog"));
+        Assert.Equal(thresholds.TransientFailuresPerFiveMinutes, Threshold("TransientFailures"));
+        Assert.Equal(thresholds.DeadlineDeferralsPerFiveMinutes, Threshold("DeadlineDeferrals"));
+    }
+
+    /// <summary>
+    /// The two counted windows are the configured ones, expressed in evaluation periods.
+    /// </summary>
+    /// <remarks>
+    /// The throttle alarm counts minutes, so its window is the configured number. The no-progress legs
+    /// count aggregation periods, and the window they cover is asserted by multiplying back rather than
+    /// by dividing the configured value the same way the construct does. Dividing here would compare a
+    /// truncation against itself: a twelve minute window deploys as two periods, and an expectation of
+    /// <c>12 / 5</c> is also two, so the case would pass while the alarm watched ten minutes.
+    /// </remarks>
+    [Fact]
+    public void The_counted_windows_are_the_configured_ones()
+    {
+        var thresholds = EnvironmentConfig.Development.AlarmThresholds;
+
+        Assert.Equal(thresholds.ThrottleEvaluationMinutes, Periods("FunctionThrottled"));
+
+        Assert.Equal(
+            thresholds.NoProgressMinutes,
+            Periods("NoProgressQueueNotEmpty") * AlarmThresholds.AggregationPeriodMinutes);
+
+        Assert.Equal(
+            thresholds.NoProgressMinutes,
+            Periods("NoProgressNothingProcessed") * AlarmThresholds.AggregationPeriodMinutes);
+    }
+
+    /// <summary>
+    /// The no-progress alarm fires only when both of its legs do.
+    /// </summary>
+    /// <remarks>
+    /// Either leg alone is a healthy state. A queue with messages on it is normal, and no processing is
+    /// normal when nothing has arrived, so an AND that became an OR would page on both.
+    /// </remarks>
+    [Fact]
+    public void The_no_progress_alarm_is_the_conjunction_of_its_two_legs()
+    {
+        var composite = Template().OnlyResource(SynthesizedStack.CompositeAlarmResourceType);
+        var rule = composite.Json("AlarmRule");
+
+        Assert.Contains("AND", rule, StringComparison.Ordinal);
+        Assert.Contains("NoProgressQueueNotEmpty", rule, StringComparison.Ordinal);
+        Assert.Contains("NoProgressNothingProcessed", rule, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A gap in the processed metrics is the outage, not an absence of news.
+    /// </summary>
+    /// <remarks>
+    /// OrdersProcessed and DuplicateEvents are published even when zero precisely so this leg has
+    /// datapoints during an outage. Left not-breaching like every other alarm here, the one condition
+    /// it watches for would report insufficient data instead of firing.
+    /// </remarks>
+    [Fact]
+    public void The_no_progress_leg_treats_missing_data_as_breaching()
+    {
+        Assert.Equal("breaching", Alarm("NoProgressNothingProcessed").Properties["TreatMissingData"]);
+        Assert.Equal("notBreaching", Alarm("DeadLetterQueueNotEmpty").Properties["TreatMissingData"]);
+    }
+
+    /// <summary>
+    /// Every alarm notifies the topic, and the composite's legs do not.
+    /// </summary>
+    /// <remarks>
+    /// An alarm with no action deploys, renders green or red on the console, and pages nobody. The legs
+    /// are the deliberate exception: they are states the composite is built from, and notifying on each
+    /// would send the two messages the composite exists to replace.
+    /// </remarks>
+    [Fact]
+    public void Every_alarm_notifies_the_topic_except_the_composites_legs()
+    {
+        var template = Template();
+
+        foreach (var (logicalId, resource) in template.FindResources(SynthesizedStack.AlarmResourceType))
+        {
+            var properties = SynthesizedStack.Object(resource["Properties"], logicalId);
+            var name = (string)properties["AlarmName"];
+            var notifies = properties.ContainsKey("AlarmActions");
+
+            Assert.Equal(!name.Contains("NoProgress", StringComparison.Ordinal), notifies);
+        }
+
+        Assert.True(
+            template.OnlyResource(SynthesizedStack.CompositeAlarmResourceType)
+                .Properties.ContainsKey("AlarmActions"));
+    }
+
+    /// <summary>
+    /// The topic subscribes the configured endpoint.
+    /// </summary>
+    /// <remarks>
+    /// The address is configuration rather than a deploy-time parameter, so the subscription is created
+    /// with the stack. The development value is a reserved domain and can never be confirmed, which is
+    /// deliberate: the repository is public.
+    /// </remarks>
+    [Fact]
+    public void The_topic_subscribes_the_configured_endpoint()
+    {
+        var subscription = Template().OnlyResource(SynthesizedStack.SubscriptionResourceType);
+
+        Assert.Equal("email", subscription.Properties["Protocol"]);
+        Assert.Equal(EnvironmentConfig.Development.AlarmEndpoint, subscription.Properties["Endpoint"]);
+    }
+
+    /// <summary>
+    /// One topic, so that a second subscriber is added in one place.
+    /// </summary>
+    [Fact]
+    public void The_stack_declares_one_alarm_topic()
+    {
+        Assert.Single(Template().FindResources(SynthesizedStack.TopicResourceType));
+    }
+
     private static Template Template() => SynthesizedStack.From(EnvironmentConfig.Development);
 
     /// <summary>
@@ -180,4 +333,35 @@ public sealed class ObservabilityConstructTests
     /// CloudWatch reads it rather than the way the template serialises it.
     /// </summary>
     private static string Unescaped() => Body().Replace(@"\u0022", @"""", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Every metric alarm's name, as the template declares it.
+    /// </summary>
+    private static IEnumerable<string> AlarmNames() =>
+        Template().FindResources(SynthesizedStack.AlarmResourceType)
+            .Select(entry => (string)SynthesizedStack.Object(entry.Value["Properties"], entry.Key)["AlarmName"]);
+
+    /// <summary>
+    /// The alarm carrying the given unprefixed name.
+    /// </summary>
+    private static SynthesizedResource Alarm(string name)
+    {
+        var full = $"reliable-orders-{EnvironmentConfig.Development.EnvironmentName}-{name}";
+
+        foreach (var (logicalId, resource) in Template().FindResources(SynthesizedStack.AlarmResourceType))
+        {
+            var properties = SynthesizedStack.Object(resource["Properties"], logicalId);
+
+            if (string.Equals((string)properties["AlarmName"], full, StringComparison.Ordinal))
+            {
+                return new SynthesizedResource(logicalId, properties, resource);
+            }
+        }
+
+        throw new InvalidOperationException($"No alarm named '{full}' in the template.");
+    }
+
+    private static int Threshold(string name) => Alarm(name).Number("Threshold");
+
+    private static int Periods(string name) => Alarm(name).Number("EvaluationPeriods");
 }

@@ -25,20 +25,50 @@ namespace ReliableOrders.CdkTests;
 /// </remarks>
 internal static class SynthesizedStack
 {
-    /// <summary>The CloudFormation type both queues are declared as.</summary>
+    /// <summary>
+    /// The CloudFormation type both queues are declared as.
+    /// </summary>
     public const string QueueResourceType = "AWS::SQS::Queue";
 
-    /// <summary>The type a queue's resource policy is declared as, separately from the queue.</summary>
+    /// <summary>
+    /// The type a queue's resource policy is declared as, separately from the queue.
+    /// </summary>
     public const string QueuePolicyResourceType = "AWS::SQS::QueuePolicy";
 
-    /// <summary>The CloudFormation type both tables are declared as.</summary>
+    /// <summary>
+    /// The CloudFormation type both tables are declared as.
+    /// </summary>
     public const string TableResourceType = "AWS::DynamoDB::Table";
 
-    /// <summary>The type an identity policy is declared as.</summary>
+    /// <summary>
+    /// The type an identity policy is declared as.
+    /// </summary>
     public const string IamPolicyResourceType = "AWS::IAM::Policy";
 
-    /// <summary>The type the operator dashboard is declared as.</summary>
+    /// <summary>
+    /// The type the operator dashboard is declared as.
+    /// </summary>
     public const string DashboardResourceType = "AWS::CloudWatch::Dashboard";
+
+    /// <summary>
+    /// The type a metric alarm is declared as.
+    /// </summary>
+    public const string AlarmResourceType = "AWS::CloudWatch::Alarm";
+
+    /// <summary>
+    /// The type the no-progress alarm is declared as, which is a different type from the rest.
+    /// </summary>
+    public const string CompositeAlarmResourceType = "AWS::CloudWatch::CompositeAlarm";
+
+    /// <summary>
+    /// The type the alarm topic is declared as.
+    /// </summary>
+    public const string TopicResourceType = "AWS::SNS::Topic";
+
+    /// <summary>
+    /// The type the topic's subscription is declared as, separately from the topic.
+    /// </summary>
+    public const string SubscriptionResourceType = "AWS::SNS::Subscription";
 
     /// <summary>
     /// Synthesises a stack built from the given configuration.
@@ -96,7 +126,9 @@ internal static class SynthesizedStack
     /// </remarks>
     public static App NewApp() => new(new AppProps { Context = DeployedContext() });
 
-    /// <summary>The account and Region every synthesised stack here is bound to.</summary>
+    /// <summary>
+    /// The account and Region every synthesised stack here is bound to.
+    /// </summary>
     public static Amazon.CDK.Environment TestEnvironment { get; } =
         new() { Account = "111122223333", Region = "eu-west-2" };
 
