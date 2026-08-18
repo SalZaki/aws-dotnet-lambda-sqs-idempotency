@@ -208,5 +208,6 @@ public sealed class PersistenceConstructTests
         idempotencyRetentionDays: 30,
         retainData: retainData,
         enablePointInTimeRecovery: pointInTimeRecovery,
-        alarmThresholds: AlarmThresholds.Development);
+        alarmThresholds: AlarmThresholds.Development,
+        alarmEndpoint: "alerts@reliable-orders.invalid");
 }

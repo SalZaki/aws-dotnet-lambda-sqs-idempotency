@@ -244,7 +244,36 @@ public sealed class EnvironmentConfigTests
     }
 
     /// <summary>
-    /// The development thresholds with one value replaced, so each case states only what it is about.
+    /// An endpoint SNS would refuse is refused here instead.
+    /// </summary>
+    /// <remarks>
+    /// The subscription is created with the stack, and SNS rejects a malformed address at subscribe
+    /// time rather than at deploy. The stack reports success, every alarm is wired to a topic with no
+    /// confirmed subscriber, and the first thing that says so is the incident nobody was paged for.
+    /// </remarks>
+    [Theory]
+    [InlineData("not-an-address")]
+    [InlineData("alerts at example.invalid")]
+    [InlineData("alerts@reliable orders.invalid")]
+    public void An_alarm_endpoint_that_is_not_an_address_is_rejected(string endpoint)
+    {
+        var exception = Assert.Throws<ArgumentException>(() => Config(alarmEndpoint: endpoint));
+
+        Assert.Contains(endpoint, exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The development endpoint is a reserved domain, so a clone of a public repository cannot mail a
+    /// real person.
+    /// </summary>
+    [Fact]
+    public void The_development_endpoint_cannot_reach_a_real_mailbox()
+    {
+        Assert.EndsWith(".invalid", EnvironmentConfig.Development.AlarmEndpoint, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The development defaults with one value replaced, so each case states only what it is about.
     /// </summary>
     private static AlarmThresholds Thresholds(
         int oldestMessageAgeSeconds = 300,
@@ -273,7 +302,8 @@ public sealed class EnvironmentConfigTests
         int maxReceiveCount = 5,
         int sourceRetentionDays = 4,
         int dlqRetentionDays = 14,
-        AlarmThresholds? alarmThresholds = null) =>
+        AlarmThresholds? alarmThresholds = null,
+        string alarmEndpoint = "alerts@reliable-orders.invalid") =>
         new(
             environmentName: "dev",
             lambdaRuntimeIdentifier: "dotnet10",
@@ -290,5 +320,6 @@ public sealed class EnvironmentConfigTests
             idempotencyRetentionDays: 30,
             retainData: false,
             enablePointInTimeRecovery: false,
-            alarmThresholds: alarmThresholds ?? Thresholds());
+            alarmThresholds: alarmThresholds ?? Thresholds(),
+            alarmEndpoint: alarmEndpoint);
 }

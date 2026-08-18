@@ -41,6 +41,26 @@ internal static class SynthesizedStack
     public const string DashboardResourceType = "AWS::CloudWatch::Dashboard";
 
     /// <summary>
+    /// The type a metric alarm is declared as.
+    /// </summary>
+    public const string AlarmResourceType = "AWS::CloudWatch::Alarm";
+
+    /// <summary>
+    /// The type the no-progress alarm is declared as, which is a different type from the rest.
+    /// </summary>
+    public const string CompositeAlarmResourceType = "AWS::CloudWatch::CompositeAlarm";
+
+    /// <summary>
+    /// The type the alarm topic is declared as.
+    /// </summary>
+    public const string TopicResourceType = "AWS::SNS::Topic";
+
+    /// <summary>
+    /// The type the topic's subscription is declared as, separately from the topic.
+    /// </summary>
+    public const string SubscriptionResourceType = "AWS::SNS::Subscription";
+
+    /// <summary>
     /// Synthesises a stack built from the given configuration.
     /// </summary>
     /// <remarks>

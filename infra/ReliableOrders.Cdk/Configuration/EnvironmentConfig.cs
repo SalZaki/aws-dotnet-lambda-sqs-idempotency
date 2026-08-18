@@ -80,9 +80,11 @@ public sealed record EnvironmentConfig
         int idempotencyRetentionDays,
         bool retainData,
         bool enablePointInTimeRecovery,
-        AlarmThresholds alarmThresholds)
+        AlarmThresholds alarmThresholds,
+        string alarmEndpoint)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(environmentName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(alarmEndpoint);
         ArgumentNullException.ThrowIfNull(alarmThresholds);
         ArgumentException.ThrowIfNullOrWhiteSpace(lambdaRuntimeIdentifier);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(lambdaMemoryMb);
@@ -94,6 +96,17 @@ public sealed record EnvironmentConfig
         ArgumentOutOfRangeException.ThrowIfNegative(visibilityMarginSeconds);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sourceRetentionDays);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(idempotencyRetentionDays);
+
+        // SNS rejects a malformed email endpoint at subscribe time, which is after the deployment has
+        // reported success. The alarms are then wired to a topic nobody receives, and nothing says so.
+        if (!alarmEndpoint.Contains('@', StringComparison.Ordinal)
+            || alarmEndpoint.Any(char.IsWhiteSpace))
+        {
+            throw new ArgumentException(
+                $"Alarm endpoint '{alarmEndpoint}' is not an email address. The topic subscribes it "
+                + "on deployment, and a rejected subscription leaves every alarm delivering nowhere.",
+                nameof(alarmEndpoint));
+        }
 
         // The three cross-value rules from the AWS CDK Design section of docs/infrastructure.md. Each
         // message quotes both numbers, because either can be the wrong one and only the reader knows
@@ -196,6 +209,7 @@ public sealed record EnvironmentConfig
         RetainData = retainData;
         EnablePointInTimeRecovery = enablePointInTimeRecovery;
         AlarmThresholds = alarmThresholds;
+        AlarmEndpoint = alarmEndpoint;
     }
 
     /// <summary>
@@ -218,7 +232,12 @@ public sealed record EnvironmentConfig
         idempotencyRetentionDays: 30,
         retainData: false,
         enablePointInTimeRecovery: false,
-        alarmThresholds: AlarmThresholds.Development);
+        alarmThresholds: AlarmThresholds.Development,
+
+        // A reserved domain from RFC 2606, so the subscription this creates can never reach a real
+        // mailbox. The repository is public and an address committed here would be deployed by
+        // whoever cloned it. Override it per environment before the alarms are expected to arrive.
+        alarmEndpoint: "alerts@reliable-orders.invalid");
 
     /// <summary>Names the deployment. It tags every resource and suffixes every queue.</summary>
     public string EnvironmentName { get; }
@@ -267,6 +286,15 @@ public sealed record EnvironmentConfig
 
     /// <summary>The numbers the alarms are built from.</summary>
     public AlarmThresholds AlarmThresholds { get; }
+
+    /// <summary>
+    /// The address the alarm topic subscribes.
+    /// </summary>
+    /// <remarks>
+    /// Email rather than a webhook or a chat integration, because a topic with an email subscriber
+    /// needs nothing deployed beside it. A second subscriber is added to the topic rather than here.
+    /// </remarks>
+    public string AlarmEndpoint { get; }
 
     /// <summary>
     /// How long a received message stays invisible to other receivers.

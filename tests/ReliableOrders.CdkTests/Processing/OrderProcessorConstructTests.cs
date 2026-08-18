@@ -38,6 +38,11 @@ public sealed class OrderProcessorConstructTests
         deadlineDeferralsPerFiveMinutes: 1);
 
     /// <summary>
+    /// Any well-formed address; these cases assert on resources, not on delivery.
+    /// </summary>
+    private const string AlarmEndpoint = "alerts@reliable-orders.invalid";
+
+    /// <summary>
     /// The function runs the configured runtime, at the configured size, on the documented handler.
     /// </summary>
     /// <remarks>
@@ -425,5 +430,6 @@ public sealed class OrderProcessorConstructTests
         idempotencyRetentionDays: IdempotencyRetentionDays,
         retainData: retainData,
         enablePointInTimeRecovery: false,
-        alarmThresholds: AlarmThresholds);
+        alarmThresholds: AlarmThresholds,
+        alarmEndpoint: AlarmEndpoint);
 }
