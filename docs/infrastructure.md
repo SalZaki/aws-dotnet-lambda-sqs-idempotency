@@ -332,6 +332,19 @@ Which configuration a synthesis uses comes from the `environment` CDK context ke
 naming the environments that exist, rather than falling back to the development sizing — deploying
 development retention into a production account is not a failure anyone notices on the day.
 
+### CDK CLI
+
+The CLI is a node package and is not the `Amazon.CDK.Lib` the constructs come from, so it is pinned
+separately, in `infra/ReliableOrders.Cdk/package.json` with a committed lock file. Run `npm ci` in
+that directory once, then `npx cdk` from it. A CLI resolved as `npx aws-cdk@latest` would let a
+release published this morning change what a pull request synthesises, which is the same reason the
+NuGet graph is restored in locked mode.
+
+Installing it there puts a `node_modules` inside a project directory, and the CLI ships C# init
+templates under it. The SDK's default globs would compile them, and `%name.PascalCased%` is not an
+identifier, so the project excludes the directory through `DefaultItemExcludes`. Without that line
+the build fails in files nobody wrote.
+
 ### CDK outputs
 
 - Source queue URL

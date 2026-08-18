@@ -1,9 +1,9 @@
 name: ci
 
-# A build gate, not the full pull-request pipeline. Story #33 owns that, and most of it cannot be
-# written yet: there are no integration tests, no CDK project to synth, and no coverage collection.
-# What is here is the part that would have caught main being merged in a state that does not compile,
-# which is why it exists ahead of its milestone.
+# The pull-request gate: everything that has to pass before a change merges and that needs neither a
+# container nor an AWS account. Formatting, the build, the tests that run without an emulator, and a
+# synthesis of the CDK app. Container-backed tests run in integration.yml, and scanning belongs to
+# #35 — this workflow runs checks, that one decides what a finding blocks.
 
 on:
   push:
@@ -11,8 +11,10 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Deliberately unfiltered by path. A gate that skips on some changes reports "not run" rather than
-# "passed", which is the wrong answer once these checks become required for merge.
+# Deliberately unfiltered by path. This job reports the `Build and test` check the default-branch
+# ruleset requires, and a filtered workflow does not report at all on a pull request that touches
+# nothing it matches. GitHub reads a check that never ran as outstanding rather than as passed, so
+# such a pull request can never merge.
 
 permissions:
   contents: read
@@ -38,15 +40,17 @@ jobs:
         with:
           global-json-file: global.json
 
-      # The CDK is a TypeScript library reached through jsii, which starts a
-      # node process for every construct the tests build. ubuntu-latest happens
-      # to preinstall node, so leaving this out passes until the runner image
-      # changes and then fails as an opaque jsii startup error rather than as a
+      # Node runs two things here. The CDK is a TypeScript library reached through jsii, which starts
+      # a node process for every construct the tests build, and the CDK CLI that synthesises the app
+      # below is a node package. ubuntu-latest happens to preinstall node, so leaving this out passes
+      # until the runner image changes and then fails as an opaque jsii startup error rather than as a
       # missing dependency.
       - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: infra/ReliableOrders.Cdk/package-lock.json
 
       # Locked mode fails when the resolved graph differs from the committed
       # packages.lock.json, so CI restores the graph that was reviewed rather
@@ -68,25 +72,80 @@ jobs:
       # image and start a container, which is minutes against a gate that otherwise finishes in well
       # under one. Expressed as an exclusion rather than an inclusion on purpose: a new test project
       # nobody remembers to wire up still runs here, which is the safe direction to be wrong in.
+      #
+      # The trx logger carries no LogFileName. One would name every project's report the same thing
+      # in the same directory, and each project would overwrite the last, leaving a summary of
+      # whichever assembly happened to finish last and no trace of the rest.
       - name: Test
         id: test
         run: >
           dotnet test ReliableOrders.slnx -c Release --no-build --filter "Category!=Integration"
-          --collect:"XPlat Code Coverage" --results-directory ./coverage
+          --collect:"XPlat Code Coverage" --logger trx --results-directory ./test-results
+
+      # A failed run otherwise reports which step failed and leaves the reader to open the log for
+      # which test. Conditioned on the tests having run, not on always(): after a compile failure
+      # there is nothing to summarise, and reporting that as a second red step points at the wrong
+      # cause. The !cancelled() guard is load-bearing here and below — an `if` carrying no status
+      # function implicitly gets success(), which would skip this exactly when a test failed and the
+      # names matter most.
+      - name: Summarise test results
+        if: ${{ !cancelled() && (steps.test.outcome == 'success' || steps.test.outcome == 'failure') }}
+        shell: bash
+        run: |
+          if ! compgen -G "./test-results/*.trx" > /dev/null; then
+            echo "::error::No test results were produced."
+            exit 1
+          fi
+          python3 - './test-results/*.trx' <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, os, sys, xml.etree.ElementTree as ET
+          ns = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          shown, failures, rows, totals = 20, [], [], [0, 0, 0, 0]
+          for report in sorted(glob.glob(sys.argv[1])):
+              root = ET.parse(report).getroot()
+              counters = root.find("t:ResultSummary/t:Counters", ns)
+              counts = [int(counters.get(name)) for name in ("total", "passed", "failed", "notExecuted")]
+              totals = [running + count for running, count in zip(totals, counts)]
+              # The file name is a timestamp, so the suite is read off the assembly under test. A run
+              # that defined no tests has none, and names itself after the report rather than crashing.
+              assembly = root.find("t:TestDefinitions/t:UnitTest/t:TestMethod", ns)
+              rows.append((os.path.basename(assembly.get("codeBase")) if assembly is not None
+                           else os.path.basename(report), counts))
+              for result in root.findall("t:Results/t:UnitTestResult", ns):
+                  if result.get("outcome") not in ("Passed", "NotExecuted"):
+                      error = result.find("t:Output/t:ErrorInfo", ns)
+                      detail = "\n".join(
+                          element.text.strip() for element in (error if error is not None else [])
+                          if element.text)
+                      failures.append((result.get("testName"), result.get("outcome"), detail))
+          print("## Tests\n")
+          print("| Suite | Total | Passed | Failed | Skipped |")
+          print("| --- | --- | --- | --- | --- |")
+          print("| Total | %d | %d | %d | %d |" % tuple(totals))
+          for assembly, counts in rows:
+              print("| %s | %d | %d | %d | %d |" % ((assembly,) + tuple(counts)))
+          if failures:
+              print("\n### Failures\n")
+              # Fenced with four backticks, because an assertion on markdown puts three in the message.
+              for name, outcome, detail in failures[:shown]:
+                  print("<details><summary><code>%s</code> — %s</summary>\n" % (name, outcome))
+                  print("````text\n%s\n````\n" % (detail or "The runner reported no detail."))
+                  print("</details>\n")
+              if len(failures) > shown:
+                  print("%d of %d failures are shown. The rest are in the test-results artifact."
+                        % (shown, len(failures)))
+          # The coverage section is appended to the same summary, and a heading on the line after a
+          # table row leaves the two sharing a block.
+          print()
+          PY
 
       # Written to the run summary rather than left inside the artifact. A number nobody reads cannot
       # inform the threshold decision it exists to inform, and reading it otherwise means downloading a
       # zip and opening Cobertura XML.
-      #
-      # Conditioned on the tests having run, not on always(). After a compile failure there is no
-      # coverage to publish, and reporting that as a second red step points at the wrong cause.
-      # The !cancelled() guard is load-bearing: an `if` carrying no status function implicitly gets
-      # success(), which would skip this exactly when a test failed and the numbers matter most.
       - name: Summarise coverage
         if: ${{ !cancelled() && (steps.test.outcome == 'success' || steps.test.outcome == 'failure') }}
         shell: bash
         run: |
-          report=$(find ./coverage -name coverage.cobertura.xml | head -1)
+          report=$(find ./test-results -name coverage.cobertura.xml | head -1)
           if [ -z "$report" ]; then
             echo "::error::No coverage report was produced."
             exit 1
@@ -104,6 +163,43 @@ jobs:
                   pkg.get("name"), float(pkg.get("line-rate")) * 100, float(pkg.get("branch-rate")) * 100))
           PY
 
+      # Synthesis packages the publish output rather than building it, so this step is not optional:
+      # without it the synthesis below fails naming this command. --no-build, so what is packaged is
+      # the binary the tests above ran against rather than a second one nothing has exercised.
+      - name: Publish the function
+        run: dotnet publish src/ReliableOrders.Function -c Release --no-build
+
+      # The CLI is a node package pinned in package.json, not the Amazon.CDK.Lib the constructs come
+      # from. npm ci rather than npm install, for the same reason the restore above is locked.
+      - name: Install the CDK CLI
+        working-directory: infra/ReliableOrders.Cdk
+        run: npm ci
+
+      # A template that no longer synthesises fails the pull request rather than the deployment. The
+      # CDK assertion tests build the stack in process, which catches a construct that throws, but not
+      # a cdk.json this app can no longer be run through or a CLI that has moved past it.
+      #
+      # The two variables are not credentials. The CLI sets them from whatever it resolved, and the
+      # app demands them so that an environment-agnostic stack — one that cannot look anything up —
+      # is never synthesised by accident. Nothing in this stack performs a lookup, so a placeholder
+      # account synthesises the same template a real one would, and no AWS access is configured here.
+      - name: Synthesise the CDK app
+        working-directory: infra/ReliableOrders.Cdk
+        env:
+          CDK_DEFAULT_ACCOUNT: "000000000000"
+          CDK_DEFAULT_REGION: eu-west-2
+        run: npx cdk synth --quiet
+
+      # The reports themselves, not only the summary above. A stack trace is worth reading in full on
+      # the run that produced it, and the summary shows the first twenty failures.
+      - name: Publish test results
+        if: ${{ !cancelled() && (steps.test.outcome == 'success' || steps.test.outcome == 'failure') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-results
+          path: test-results/*.trx
+          if-no-files-found: error
+
       # Collected and published, not enforced. A threshold is a number the team has to agree, and one
       # picked here would either sit below what the suite already reaches, which proves nothing, or
       # block work unrelated to the code that moved it.
@@ -112,5 +208,5 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage
-          path: coverage/**/coverage.cobertura.xml
+          path: test-results/**/coverage.cobertura.xml
           if-no-files-found: error

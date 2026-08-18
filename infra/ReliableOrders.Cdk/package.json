@@ -1,0 +1,10 @@
+{
+  "name": "reliable-orders-cdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pins the AWS CDK CLI that synthesises and deploys this app. The constructs come from Amazon.CDK.Lib in the csproj; only the CLI is installed here.",
+  "license": "MIT",
+  "devDependencies": {
+    "aws-cdk": "2.1137.0"
+  }
+}
