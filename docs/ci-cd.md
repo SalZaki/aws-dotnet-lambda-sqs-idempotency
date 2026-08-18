@@ -89,9 +89,10 @@ The workflow file is `.github/workflows/integration.yml`. It runs on pull reques
 1. Checkout.
 2. Install the pinned .NET SDK from `global.json`.
 3. Restore using locked dependencies, and build in Release mode.
-4. Pull `amazon/dynamodb-local` at its pinned digest.
-5. Pull `localstack/localstack` at its pinned digest, only when an auth token is available.
-6. Run the container-backed tests, as `--filter "Category=Integration"`.
+4. Log in to Docker Hub, when this run has credentials to do it with.
+5. Pull `amazon/dynamodb-local` at its pinned digest.
+6. Pull `localstack/localstack` at its pinned digest, only when an auth token is available.
+7. Run the container-backed tests, as `--filter "Category=Integration"`.
 
 Both images are pre-pulled so that a registry failure is reported as itself rather than as a
 container that would not start, and both are pinned to a digest that `ContainerImageTests` holds in
@@ -101,6 +102,20 @@ than as a bill.
 
 This workflow is deliberately **not** a required check. These tests are slow, not unimportant, and a
 failure here still has to be looked at.
+
+### Docker Hub credentials
+
+Both pulls were anonymous, and the anonymous allowance is counted per IP address, which on a
+GitHub-hosted runner is shared with every other job in the pool. The failure that produces is
+intermittent, arrives as a pull that cannot be reproduced locally, and gets more likely as the
+LocalStack image grows. Step 4 authenticates instead, from `DOCKERHUB_USERNAME` — a repository
+variable, because a username is not a secret and hiding it only makes the configuration harder to
+check — and a `DOCKERHUB_TOKEN` secret holding a Docker Hub access token with read-only scope.
+
+The step is conditional, and a run without either value pulls anonymously rather than failing. That
+is the same trade the auth token below makes: a pull request from a fork can be given neither value
+however this repository is configured, and it should do what it can rather than stop at a credential
+nobody can hand it.
 
 ### The LocalStack auth token
 
@@ -112,7 +127,7 @@ step-level declaration the conditional pull is skipped on every run, including t
 a token.
 
 GitHub does not expose repository secrets to a pull request from a fork, so an outside contributor's
-run has no token however the repository is configured. Step 6 then excludes those tests by trait and
+run has no token however the repository is configured. Step 7 then excludes those tests by trait and
 says so in a warning, and the rest still run. They would skip themselves in any case, but only after
 paying for a two-gigabyte pull.
 

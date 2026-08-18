@@ -112,6 +112,11 @@ public sealed class LocalStackFixture : IAsyncLifetime
         "LOCALSTACK_AUTH_TOKEN is not set, so no SQS emulator can be started. See the SQS Emulation "
         + "section of docs/testing-strategy.md.";
 
+    /// <summary>
+    /// How many lines of each output stream a failure reports.
+    /// </summary>
+    private const int LoggedLines = 50;
+
     private IContainer? _container;
 
     /// <summary>
@@ -154,7 +159,17 @@ public sealed class LocalStackFixture : IAsyncLifetime
 
         _container = BuildContainer(ReadAuthToken());
 
-        await _container.StartAsync();
+        // Wrapped so the container's own output survives it. Every startup failure worth diagnosing
+        // looks the same from out here — the wait strategy above gives up at its ceiling — and the
+        // line explaining why is inside a container nothing will read before it is reaped.
+        try
+        {
+            await _container.StartAsync();
+        }
+        catch (Exception failure)
+        {
+            throw new InvalidOperationException(await DescribeStartFailureAsync(_container), failure);
+        }
 
         // Credentials are required by the SDK and ignored by LocalStack. They are obviously fake so
         // that nobody reads this as a place real ones could be needed — the auth token above is a
@@ -190,6 +205,64 @@ public sealed class LocalStackFixture : IAsyncLifetime
         {
             await _container.DisposeAsync();
         }
+    }
+
+    /// <summary>
+    /// What the container wrote before it failed to become ready.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An expired token, a rejected one, and a TLS interceptor <see cref="CaBundleVariable"/> does not
+    /// cover all end the same way: the image exits 55 before opening its edge port, and the licensing
+    /// error it printed is the diagnosis. Testcontainers does report that one itself, with the exit
+    /// code and the output — what it cannot report is the container that starts, stays up, and never
+    /// answers healthy, where the wait is called off at <see cref="StartupCeiling"/> and the reason is
+    /// left in a log nothing reads. Both arrive here, so both say what happened.
+    /// </para>
+    /// <para>
+    /// Reading the log can fail in its own right — an image that never pulled leaves no container to
+    /// read — so that failure is reported as itself rather than replacing the one being explained.
+    /// </para>
+    /// </remarks>
+    private static async Task<string> DescribeStartFailureAsync(IContainer container)
+    {
+        string written;
+
+        try
+        {
+            var (stdout, stderr) = await container.GetLogsAsync(timestampsEnabled: false);
+
+            written = $"stdout:{Environment.NewLine}{Tail(stdout)}{Environment.NewLine}{Environment.NewLine}"
+                + $"stderr:{Environment.NewLine}{Tail(stderr)}";
+        }
+        catch (Exception unreadable)
+        {
+            written = $"Its logs could not be read either: {unreadable.Message}";
+        }
+
+        return "The LocalStack container did not become ready, so no SQS emulator is available. It "
+            + "exits 55 before opening its edge port when its licence cannot be activated, which is "
+            + $"an outbound call to api.localstack.cloud — check {AuthTokenVariable}, and "
+            + $"{CaBundleVariable} on a machine behind a TLS interceptor. The last {LoggedLines} "
+            + $"lines it wrote:{Environment.NewLine}{Environment.NewLine}{written}";
+    }
+
+    /// <summary>
+    /// The end of an output stream, which is where a container that gave up says why.
+    /// </summary>
+    /// <remarks>
+    /// Bounded because the ceiling is three minutes, and a container that starts, runs, and fails its
+    /// health check spends all of them logging. The beginning of that is startup banner.
+    /// </remarks>
+    private static string Tail(string output)
+    {
+        var lines = output.Split(
+            '\n',
+            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        return lines.Length == 0
+            ? "(nothing)"
+            : string.Join(Environment.NewLine, lines[^Math.Min(LoggedLines, lines.Length)..]);
     }
 
     /// <summary>
