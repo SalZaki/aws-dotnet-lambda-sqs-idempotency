@@ -44,7 +44,9 @@ public sealed record EnvironmentConfig
     /// </summary>
     private const int MaximumBatchedSize = 10_000;
 
-    /// <summary>The longest SQS will wait to fill a batch.</summary>
+    /// <summary>
+    /// The longest SQS will wait to fill a batch.
+    /// </summary>
     private const int MaximumBatchWindowSeconds = 300;
 
     /// <summary>
@@ -53,7 +55,9 @@ public sealed record EnvironmentConfig
     /// </summary>
     private const int MinimumEventSourceConcurrency = 2;
 
-    /// <summary>The widest it accepts.</summary>
+    /// <summary>
+    /// The widest it accepts.
+    /// </summary>
     private const int MaximumEventSourceConcurrency = 1_000;
 
     /// <summary>
@@ -239,52 +243,84 @@ public sealed record EnvironmentConfig
         // whoever cloned it. Override it per environment before the alarms are expected to arrive.
         alarmEndpoint: "alerts@reliable-orders.invalid");
 
-    /// <summary>Names the deployment. It tags every resource and suffixes every queue.</summary>
+    /// <summary>
+    /// Names the deployment. It tags every resource and suffixes every queue.
+    /// </summary>
     public string EnvironmentName { get; }
 
-    /// <summary>The managed runtime the function runs on.</summary>
+    /// <summary>
+    /// The managed runtime the function runs on.
+    /// </summary>
     public string LambdaRuntimeIdentifier { get; }
 
-    /// <summary>Memory allocated to the function.</summary>
+    /// <summary>
+    /// Memory allocated to the function.
+    /// </summary>
     public int LambdaMemoryMb { get; }
 
-    /// <summary>How long one invocation may run.</summary>
+    /// <summary>
+    /// How long one invocation may run.
+    /// </summary>
     public int LambdaTimeoutSeconds { get; }
 
-    /// <summary>Concurrent executions the function is allowed.</summary>
+    /// <summary>
+    /// Concurrent executions the function is allowed.
+    /// </summary>
     public int ReservedConcurrency { get; }
 
-    /// <summary>Records the event source delivers per invocation.</summary>
+    /// <summary>
+    /// Records the event source delivers per invocation.
+    /// </summary>
     public int BatchSize { get; }
 
-    /// <summary>How long the event source waits to fill a batch.</summary>
+    /// <summary>
+    /// How long the event source waits to fill a batch.
+    /// </summary>
     public int BatchWindowSeconds { get; }
 
-    /// <summary>Concurrent executions the event source may request.</summary>
+    /// <summary>
+    /// Concurrent executions the event source may request.
+    /// </summary>
     public int MaxConcurrency { get; }
 
-    /// <summary>Operational margin added to the computed visibility timeout.</summary>
+    /// <summary>
+    /// Operational margin added to the computed visibility timeout.
+    /// </summary>
     public int VisibilityMarginSeconds { get; }
 
-    /// <summary>Receives before a message moves to the dead-letter queue.</summary>
+    /// <summary>
+    /// Receives before a message moves to the dead-letter queue.
+    /// </summary>
     public int MaxReceiveCount { get; }
 
-    /// <summary>How long the source queue keeps a message.</summary>
+    /// <summary>
+    /// How long the source queue keeps a message.
+    /// </summary>
     public int SourceRetentionDays { get; }
 
-    /// <summary>How long the dead-letter queue keeps a message.</summary>
+    /// <summary>
+    /// How long the dead-letter queue keeps a message.
+    /// </summary>
     public int DlqRetentionDays { get; }
 
-    /// <summary>How long an idempotency record is kept.</summary>
+    /// <summary>
+    /// How long an idempotency record is kept.
+    /// </summary>
     public int IdempotencyRetentionDays { get; }
 
-    /// <summary>Whether the tables survive stack deletion.</summary>
+    /// <summary>
+    /// Whether the tables survive stack deletion.
+    /// </summary>
     public bool RetainData { get; }
 
-    /// <summary>Whether the tables carry point-in-time recovery.</summary>
+    /// <summary>
+    /// Whether the tables carry point-in-time recovery.
+    /// </summary>
     public bool EnablePointInTimeRecovery { get; }
 
-    /// <summary>The numbers the alarms are built from.</summary>
+    /// <summary>
+    /// The numbers the alarms are built from.
+    /// </summary>
     public AlarmThresholds AlarmThresholds { get; }
 
     /// <summary>

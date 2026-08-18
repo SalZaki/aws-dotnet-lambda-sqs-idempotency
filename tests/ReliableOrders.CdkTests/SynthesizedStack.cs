@@ -25,19 +25,29 @@ namespace ReliableOrders.CdkTests;
 /// </remarks>
 internal static class SynthesizedStack
 {
-    /// <summary>The CloudFormation type both queues are declared as.</summary>
+    /// <summary>
+    /// The CloudFormation type both queues are declared as.
+    /// </summary>
     public const string QueueResourceType = "AWS::SQS::Queue";
 
-    /// <summary>The type a queue's resource policy is declared as, separately from the queue.</summary>
+    /// <summary>
+    /// The type a queue's resource policy is declared as, separately from the queue.
+    /// </summary>
     public const string QueuePolicyResourceType = "AWS::SQS::QueuePolicy";
 
-    /// <summary>The CloudFormation type both tables are declared as.</summary>
+    /// <summary>
+    /// The CloudFormation type both tables are declared as.
+    /// </summary>
     public const string TableResourceType = "AWS::DynamoDB::Table";
 
-    /// <summary>The type an identity policy is declared as.</summary>
+    /// <summary>
+    /// The type an identity policy is declared as.
+    /// </summary>
     public const string IamPolicyResourceType = "AWS::IAM::Policy";
 
-    /// <summary>The type the operator dashboard is declared as.</summary>
+    /// <summary>
+    /// The type the operator dashboard is declared as.
+    /// </summary>
     public const string DashboardResourceType = "AWS::CloudWatch::Dashboard";
 
     /// <summary>
@@ -116,7 +126,9 @@ internal static class SynthesizedStack
     /// </remarks>
     public static App NewApp() => new(new AppProps { Context = DeployedContext() });
 
-    /// <summary>The account and Region every synthesised stack here is bound to.</summary>
+    /// <summary>
+    /// The account and Region every synthesised stack here is bound to.
+    /// </summary>
     public static Amazon.CDK.Environment TestEnvironment { get; } =
         new() { Account = "111122223333", Region = "eu-west-2" };
 

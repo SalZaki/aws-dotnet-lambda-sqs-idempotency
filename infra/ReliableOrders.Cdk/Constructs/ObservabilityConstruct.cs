@@ -32,40 +32,64 @@ namespace ReliableOrders.Cdk.Constructs;
 /// </remarks>
 public sealed class ObservabilityConstruct : Construct
 {
-    /// <summary>New orders committed.</summary>
+    /// <summary>
+    /// New orders committed.
+    /// </summary>
     public const string OrdersProcessedMetric = "OrdersProcessed";
 
-    /// <summary>Duplicate events safely ignored.</summary>
+    /// <summary>
+    /// Duplicate events safely ignored.
+    /// </summary>
     public const string DuplicateEventsMetric = "DuplicateEvents";
 
-    /// <summary>Key or order identifier reused with different data.</summary>
+    /// <summary>
+    /// Key or order identifier reused with different data.
+    /// </summary>
     public const string IdempotencyConflictsMetric = "IdempotencyConflicts";
 
-    /// <summary>Permanently invalid events.</summary>
+    /// <summary>
+    /// Permanently invalid events.
+    /// </summary>
     public const string ValidationFailuresMetric = "ValidationFailures";
 
-    /// <summary>Requests the store will never accept.</summary>
+    /// <summary>
+    /// Requests the store will never accept.
+    /// </summary>
     public const string PermanentFaultsMetric = "PermanentFaults";
 
-    /// <summary>Retryable record failures.</summary>
+    /// <summary>
+    /// Retryable record failures.
+    /// </summary>
     public const string TransientFailuresMetric = "TransientFailures";
 
-    /// <summary>End-to-end per-record processing duration.</summary>
+    /// <summary>
+    /// End-to-end per-record processing duration.
+    /// </summary>
     public const string RecordProcessingLatencyMetric = "RecordProcessingLatency";
 
-    /// <summary>Records deferred because invocation time was low.</summary>
+    /// <summary>
+    /// Records deferred because invocation time was low.
+    /// </summary>
     public const string DeadlineDeferralsMetric = "DeadlineDeferrals";
 
-    /// <summary>Read requests DynamoDB throttled, published against the table.</summary>
+    /// <summary>
+    /// Read requests DynamoDB throttled, published against the table.
+    /// </summary>
     public const string ReadThrottleEventsMetric = "ReadThrottleEvents";
 
-    /// <summary>Write requests DynamoDB throttled, published against the table.</summary>
+    /// <summary>
+    /// Write requests DynamoDB throttled, published against the table.
+    /// </summary>
     public const string WriteThrottleEventsMetric = "WriteThrottleEvents";
 
-    /// <summary>The dimension naming the service that published a metric.</summary>
+    /// <summary>
+    /// The dimension naming the service that published a metric.
+    /// </summary>
     public const string ServiceDimension = "Service";
 
-    /// <summary>The dimension naming the deployment that published it.</summary>
+    /// <summary>
+    /// The dimension naming the deployment that published it.
+    /// </summary>
     public const string EnvironmentDimension = "Environment";
 
     private const int WidgetWidth = 6;
@@ -313,7 +337,9 @@ public sealed class ObservabilityConstruct : Construct
             comparison: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD);
     }
 
-    /// <summary>The dashboard, exposed so a later construct can add to it rather than build a second.</summary>
+    /// <summary>
+    /// The dashboard, exposed so a later construct can add to it rather than build a second.
+    /// </summary>
     public Dashboard Dashboard { get; }
 
     /// <summary>
