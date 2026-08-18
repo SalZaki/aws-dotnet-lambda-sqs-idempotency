@@ -98,7 +98,12 @@ public sealed class ObservabilityConstruct : Construct
     /// <summary>
     /// The period every metric here is aggregated over, and the unit the multi-period alarms count in.
     /// </summary>
-    private const int MetricPeriodMinutes = 5;
+    /// <remarks>
+    /// An alias rather than a second five. <see cref="AlarmThresholds"/> rejects a no-progress window
+    /// that is not a whole number of these, so the divisor that validates a window has to be the one
+    /// that converts it.
+    /// </remarks>
+    private const int MetricPeriodMinutes = AlarmThresholds.AggregationPeriodMinutes;
 
     /// <summary>
     /// Prefixes every alarm name, so two environments in one account stay apart.

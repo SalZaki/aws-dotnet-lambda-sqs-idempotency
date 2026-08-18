@@ -21,6 +21,17 @@ namespace ReliableOrders.Cdk.Configuration;
 public sealed record AlarmThresholds
 {
     /// <summary>
+    /// The period every metric behind these thresholds is aggregated over.
+    /// </summary>
+    /// <remarks>
+    /// Declared here rather than in the construct that builds the alarms, because it is what the
+    /// per-five-minutes property names mean and what the counted windows are divided into. One
+    /// declaration, so the divisor a window is validated against is the divisor it is later converted
+    /// with.
+    /// </remarks>
+    public const int AggregationPeriodMinutes = 5;
+
+    /// <summary>
     /// Builds the set. A threshold of zero or less would alarm on an idle queue, so it is refused.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">A value is zero or negative.</exception>
@@ -36,6 +47,18 @@ public sealed record AlarmThresholds
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(transientFailuresPerFiveMinutes);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(noProgressMinutes);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(deadlineDeferralsPerFiveMinutes);
+
+        // The no-progress window is deployed as a count of aggregation periods, so a window that is not
+        // a whole number of them is silently rescaled to the one below it. Twelve minutes would deploy
+        // as ten, and anything under five as an alarm of zero evaluation periods, which is not an alarm.
+        if (noProgressMinutes % AggregationPeriodMinutes != 0)
+        {
+            throw new ArgumentException(
+                $"No-progress window {noProgressMinutes} minutes is not a multiple of the "
+                + $"{AggregationPeriodMinutes} minute aggregation period. The window is deployed as a "
+                + "count of those periods, so a remainder is discarded rather than rounded.",
+                nameof(noProgressMinutes));
+        }
 
         OldestMessageAgeSeconds = oldestMessageAgeSeconds;
         ThrottleEvaluationMinutes = throttleEvaluationMinutes;

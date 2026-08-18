@@ -211,8 +211,11 @@ public sealed class ObservabilityConstructTests
     /// The two counted windows are the configured ones, expressed in evaluation periods.
     /// </summary>
     /// <remarks>
-    /// The throttle alarm counts minutes and the no-progress legs count five-minute periods, which is
-    /// the arithmetic worth pinning: a change to the aggregation period silently rescales the second.
+    /// The throttle alarm counts minutes, so its window is the configured number. The no-progress legs
+    /// count aggregation periods, and the window they cover is asserted by multiplying back rather than
+    /// by dividing the configured value the same way the construct does. Dividing here would compare a
+    /// truncation against itself: a twelve minute window deploys as two periods, and an expectation of
+    /// <c>12 / 5</c> is also two, so the case would pass while the alarm watched ten minutes.
     /// </remarks>
     [Fact]
     public void The_counted_windows_are_the_configured_ones()
@@ -220,8 +223,14 @@ public sealed class ObservabilityConstructTests
         var thresholds = EnvironmentConfig.Development.AlarmThresholds;
 
         Assert.Equal(thresholds.ThrottleEvaluationMinutes, Periods("FunctionThrottled"));
-        Assert.Equal(thresholds.NoProgressMinutes / 5, Periods("NoProgressQueueNotEmpty"));
-        Assert.Equal(thresholds.NoProgressMinutes / 5, Periods("NoProgressNothingProcessed"));
+
+        Assert.Equal(
+            thresholds.NoProgressMinutes,
+            Periods("NoProgressQueueNotEmpty") * AlarmThresholds.AggregationPeriodMinutes);
+
+        Assert.Equal(
+            thresholds.NoProgressMinutes,
+            Periods("NoProgressNothingProcessed") * AlarmThresholds.AggregationPeriodMinutes);
     }
 
     /// <summary>

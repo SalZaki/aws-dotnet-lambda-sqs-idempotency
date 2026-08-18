@@ -232,6 +232,30 @@ public sealed class EnvironmentConfigTests
     }
 
     /// <summary>
+    /// A no-progress window that is not a whole number of aggregation periods is rejected.
+    /// </summary>
+    /// <remarks>
+    /// The window deploys as a count of five-minute periods, so a remainder is discarded rather than
+    /// rounded. Twelve would watch ten minutes, and anything below five would deploy zero evaluation
+    /// periods, which CloudWatch does not accept. Neither reports itself: the alarm exists, shows a
+    /// state, and covers a window nobody chose.
+    /// </remarks>
+    [Theory]
+    [InlineData(12)]
+    [InlineData(4)]
+    [InlineData(1)]
+    public void A_no_progress_window_that_is_not_a_whole_number_of_periods_is_rejected(int minutes)
+    {
+        var exception = Assert.Throws<ArgumentException>(
+            () => Thresholds(noProgressMinutes: minutes));
+
+        Assert.Contains(
+            minutes.ToString(CultureInfo.InvariantCulture),
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A threshold of zero deploys an alarm that cannot distinguish a fault from an idle queue.
     /// </summary>
     [Theory]
