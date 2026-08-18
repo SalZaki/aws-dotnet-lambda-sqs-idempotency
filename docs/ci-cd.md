@@ -127,7 +127,7 @@ step-level declaration the conditional pull is skipped on every run, including t
 a token.
 
 GitHub does not expose repository secrets to a pull request from a fork, so an outside contributor's
-run has no token however the repository is configured. Step 6 then excludes those tests by trait and
+run has no token however the repository is configured. Step 7 then excludes those tests by trait and
 says so in a warning, and the rest still run. They would skip themselves in any case, but only after
 paying for a two-gigabyte pull.
 

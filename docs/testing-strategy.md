@@ -213,9 +213,10 @@ an invocation fails outright are not modelled. Story 6.3 is where the real thing
 Its gather polls: the first receive is immediate, and every one after it waits a second. Polling
 immediately throughout is what a batch assertion cannot survive — a send and a receive microseconds
 apart against an emulator that has not made the message visible yet answers empty twice, and the
-test fails on a short count rather than on the timing that caused it. The wait bounds a gather that
-finds nothing at two seconds, which is cheap enough to leave on the paths that assert a queue is
-empty.
+test fails on a short count rather than on the timing that caused it. Two consecutive empty
+responses end the gather, so the wait costs a second on an empty queue — one immediate poll and one
+that waits — and two where a partial batch is followed by two empty polls. Both are cheap enough to
+leave on the paths that assert a queue is empty.
 
 ### Verify
 

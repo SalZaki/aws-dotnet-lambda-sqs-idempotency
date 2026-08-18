@@ -43,7 +43,8 @@ internal sealed class EventSourceMapping
     /// keeping instant. Every poll after it waits, because the alternative is a race the caller
     /// cannot see: a send and a receive microseconds apart against an emulator that has not made the
     /// message visible yet returns empty twice, and a test asserting on a count fails naming the
-    /// count rather than the timing. One second bounds a gather that finds nothing at two.
+    /// count rather than the timing. Two consecutive empty responses end the gather, so the waiting
+    /// costs a second on an empty queue and two where a partial batch is followed by two empties.
     /// </remarks>
     private const int RetryWaitSeconds = 1;
 
