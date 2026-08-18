@@ -35,6 +35,18 @@ internal sealed class EventSourceMapping
     /// </remarks>
     private const int EmptyReceivesBeforeGivingUp = 2;
 
+    /// <summary>
+    /// How long a poll after the first waits for a message to turn up.
+    /// </summary>
+    /// <remarks>
+    /// The first poll returns whatever is already visible, which is the common case and the one worth
+    /// keeping instant. Every poll after it waits, because the alternative is a race the caller
+    /// cannot see: a send and a receive microseconds apart against an emulator that has not made the
+    /// message visible yet returns empty twice, and a test asserting on a count fails naming the
+    /// count rather than the timing. One second bounds a gather that finds nothing at two.
+    /// </remarks>
+    private const int RetryWaitSeconds = 1;
+
     private readonly IAmazonSQS _client;
     private readonly SqsQueues _queues;
 
@@ -50,7 +62,8 @@ internal sealed class EventSourceMapping
     /// <remarks>
     /// Polls until it has that many or the queue answers empty twice, rather than taking one receive
     /// as the whole batch. A test publishing three messages and receiving two would otherwise assert
-    /// against a batch missing a record, and the failure would name the wrong thing.
+    /// against a batch missing a record, and the failure would name the wrong thing. The first poll
+    /// is immediate and the rest wait, for the reason given on <see cref="RetryWaitSeconds"/>.
     /// </remarks>
     internal async Task<IReadOnlyList<SqsMessage>> ReceiveAsync(
         int maxRecords,
@@ -58,6 +71,7 @@ internal sealed class EventSourceMapping
     {
         var received = new List<SqsMessage>(maxRecords);
         var empties = 0;
+        var polls = 0;
 
         while (received.Count < maxRecords && empties < EmptyReceivesBeforeGivingUp)
         {
@@ -66,7 +80,7 @@ internal sealed class EventSourceMapping
                 {
                     QueueUrl = _queues.SourceQueueUrl,
                     MaxNumberOfMessages = maxRecords - received.Count,
-                    WaitTimeSeconds = 0,
+                    WaitTimeSeconds = polls++ == 0 ? 0 : RetryWaitSeconds,
 
                     // Both requested explicitly. SQS returns neither by default, and the receive
                     // count is what the first-receipt metric gate reads, so a batch built without it

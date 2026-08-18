@@ -39,8 +39,17 @@ jobs:
     # anywhere in this job: the tests must run against the containers on a clean machine, and an
     # accidental dependency on a real account should show up here as a failure rather than as a
     # surprise bill.
+    #
+    # The Docker Hub credentials are declared here for the same reason and are not a LocalStack
+    # licence either: they lift this job off the anonymous pull allowance, which is counted per IP
+    # and so is shared with every other GitHub-hosted runner in the pool. The failure that buys is
+    # intermittent, arrives as a pull that cannot be reproduced locally, and gets likelier as the
+    # LocalStack image grows. The username is a repository variable rather than a secret, because it
+    # is not one and hiding it only makes the configuration harder to check.
     env:
       LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
     steps:
       # Third-party actions are pinned to an immutable commit SHA rather than a
@@ -58,6 +67,17 @@ jobs:
 
       - name: Build
         run: dotnet build ReliableOrders.slnx -c Release --no-restore
+
+      # Authenticated where there is an account to authenticate with. A pull request from a fork has
+      # neither value, and falls back to the anonymous allowance rather than failing — the same trade
+      # the auth token above makes, and for the same reason: an outside contributor's run should do
+      # what it can rather than stop at a credential nobody can give it.
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
 
       # Pulled explicitly so that an image-registry failure is reported as itself rather than as a
       # container that would not start. Testcontainers would otherwise pull them inside the fixtures,

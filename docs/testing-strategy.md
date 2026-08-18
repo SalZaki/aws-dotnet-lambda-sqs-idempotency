@@ -188,6 +188,12 @@ constraints marked critical, and LocalStack runs Python on OpenSSL 3, which reje
 so the mount looks ineffective while the error quietly changes from an unknown issuer to a malformed
 one. The one published at `mobile.zscaler.net/downloads/zscaler2048_sha256.crt` is correctly formed.
 
+**A container that never becomes ready reports what it wrote.** The fixture wraps the start, reads
+the container's output, and fails naming the two variables above with the last fifty lines of each
+stream. Testcontainers already reports the exit-55 case with its output attached; what it cannot
+report is the container that starts, stays up, and never answers healthy, where the wait is called
+off at its ceiling and the reason stays in a log that nothing reads before the container is reaped.
+
 `SSL_NO_VERIFY=1` is LocalStack's own escape hatch and is deliberately set nowhere in this
 repository. A committed flag that disables certificate verification is worse than a test that says
 it cannot run, and their own documentation limits it to short-term debugging on one machine. The
@@ -203,6 +209,13 @@ show that acting on it redelivers one record rather than ten.
 
 The mapping itself is a stand-in, and a partial one: batch window, concurrency, and what happens when
 an invocation fails outright are not modelled. Story 6.3 is where the real thing is exercised.
+
+Its gather polls: the first receive is immediate, and every one after it waits a second. Polling
+immediately throughout is what a batch assertion cannot survive — a send and a receive microseconds
+apart against an emulator that has not made the message visible yet answers empty twice, and the
+test fails on a short count rather than on the timing that caused it. The wait bounds a gather that
+finds nothing at two seconds, which is cheap enough to leave on the paths that assert a queue is
+empty.
 
 ### Verify
 
