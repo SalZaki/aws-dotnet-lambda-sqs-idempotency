@@ -7,7 +7,9 @@
 artifacts/
 
 ## Test and coverage output
+# Both spellings: the SDK writes TestResults, and the documented test command writes test-results.
 [Tt]est[Rr]esults/
+test-results/
 *.trx
 *.coverage
 *.coverlet.json

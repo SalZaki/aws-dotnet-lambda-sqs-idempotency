@@ -43,8 +43,10 @@
     "**/*.md"
   ],
 
+  // Any node_modules, not only one at the root: the CDK CLI is installed under
+  // infra/ReliableOrders.Cdk and ships a README this configuration would fail.
   "ignores": [
-    "node_modules/**",
+    "**/node_modules/**",
     ".github/ISSUE_TEMPLATE/**"
   ]
 }
