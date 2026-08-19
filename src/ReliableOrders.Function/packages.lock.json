@@ -10,18 +10,18 @@
       },
       "Amazon.Lambda.Serialization.SystemTextJson": {
         "type": "Direct",
-        "requested": "[3.0.0, )",
-        "resolved": "3.0.0",
-        "contentHash": "8lKS2w8Ww+Kq41mRmedL3lYLVr+UE0tzN2FwOigxKe+hzDbWJIMXZwVHwf53RsdFsYZlaTmW4WHE56W/1Fk3Hg==",
+        "requested": "[3.0.1, )",
+        "resolved": "3.0.1",
+        "contentHash": "QsHygaMyxQdgh5NPs5GGyBjK6mqQr5nv8rpqlrWC5+e1k7sVx+2xwDHv493S5IMw461S/PyHfjkUDjIQU5ArSA==",
         "dependencies": {
-          "Amazon.Lambda.Core": "3.0.0"
+          "Amazon.Lambda.Core": "3.3.0"
         }
       },
       "Amazon.Lambda.SQSEvents": {
         "type": "Direct",
-        "requested": "[3.0.0, )",
-        "resolved": "3.0.0",
-        "contentHash": "FTWf7ODv7+hwnqHREYQWntNDJsu4WWtTcEZoji0e5QiChMMrMyfYf07E7flBanolf8dTY6jfVdDfC816uGkzdA=="
+        "requested": "[3.0.1, )",
+        "resolved": "3.0.1",
+        "contentHash": "57cPCJQIDLYzKHXsK6hXZUFH+Ra6JpNXXlyjP/O/hvjBmhRud7EPt4IBgowW8P6s1wqoS+9txmi+iuLwhZ7I4A=="
       },
       "Microsoft.Extensions.DependencyInjection": {
         "type": "Direct",
@@ -218,7 +218,7 @@
         "type": "Project",
         "dependencies": {
           "AWSSDK.DynamoDBv2": "[4.0.102.1, )",
-          "Amazon.Lambda.SQSEvents": "[3.0.0, )",
+          "Amazon.Lambda.SQSEvents": "[3.0.1, )",
           "ReliableOrders.Core": "[1.0.0, )"
         }
       },

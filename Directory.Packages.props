@@ -7,17 +7,17 @@
 
   <!-- AWS. Permitted in ReliableOrders.Aws and ReliableOrders.Function only, never in Core. -->
   <ItemGroup>
-    <PackageVersion Include="AWSSDK.DynamoDBv2" Version="4.0.102.1" />
+    <PackageVersion Include="AWSSDK.DynamoDBv2" Version="4.0.103.3" />
     <!--
       SQS is a test-only dependency. Nothing in src calls the SQS API: the event source mapping
       delivers records and the response tells Lambda what to redeliver, so the service never sends,
       receives, or deletes a message. The integration suite does all three, because that is what
       standing in for the mapping requires.
     -->
-    <PackageVersion Include="AWSSDK.SQS" Version="4.0.100.8" />
+    <PackageVersion Include="AWSSDK.SQS" Version="4.0.100.9" />
     <PackageVersion Include="Amazon.Lambda.Core" Version="3.3.0" />
-    <PackageVersion Include="Amazon.Lambda.SQSEvents" Version="3.0.0" />
-    <PackageVersion Include="Amazon.Lambda.Serialization.SystemTextJson" Version="3.0.0" />
+    <PackageVersion Include="Amazon.Lambda.SQSEvents" Version="3.0.1" />
+    <PackageVersion Include="Amazon.Lambda.Serialization.SystemTextJson" Version="3.0.1" />
   </ItemGroup>
 
   <!--
