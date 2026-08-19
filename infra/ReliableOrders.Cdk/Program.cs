@@ -5,7 +5,7 @@ using ReliableOrders.Cdk.Stacks;
 // The environment is a context value rather than an environment variable, so the configuration that
 // was deployed is visible in cdk.json and in the command that deployed it. An unknown name fails
 // synthesis in EnvironmentConfig rather than here.
-var app = new App();
+var app = NagPolicy.Apply(new App());
 var config = EnvironmentConfig.ForEnvironment(EnvironmentName(app));
 
 // Account and Region come from the credentials the CLI resolved, which keeps account IDs out of

@@ -66,6 +66,11 @@ internal static class SynthesizedStack
     public const string TopicResourceType = "AWS::SNS::Topic";
 
     /// <summary>
+    /// The type the topic's own resource policy is declared as, separately from the topic.
+    /// </summary>
+    public const string TopicPolicyResourceType = "AWS::SNS::TopicPolicy";
+
+    /// <summary>
     /// The type the topic's subscription is declared as, separately from the topic.
     /// </summary>
     public const string SubscriptionResourceType = "AWS::SNS::Subscription";

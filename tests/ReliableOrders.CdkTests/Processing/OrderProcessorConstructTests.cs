@@ -237,6 +237,66 @@ public sealed class OrderProcessorConstructTests
     }
 
     /// <summary>
+    /// What the role is granted on its own log group, in the order CDK writes them.
+    /// </summary>
+    private static readonly string[] LogWriteActions = ["logs:CreateLogStream", "logs:PutLogEvents"];
+
+    /// <summary>
+    /// The execution role carries no AWS managed policy.
+    /// </summary>
+    /// <remarks>
+    /// CDK attaches AWSLambdaBasicExecutionRole to the role it creates for a function, which grants
+    /// logs:CreateLogGroup across the account and writes to every group in it. The role is declared
+    /// here instead, so what the function may do is what this stack granted it — and a policy AWS
+    /// widens later cannot widen this function with it. Asserted as absent rather than as empty,
+    /// because CDK omits the property when there is nothing to put in it.
+    /// </remarks>
+    [Fact]
+    public void The_role_carries_no_managed_policy()
+    {
+        var role = Assert.Single(Template().FindResources("AWS::IAM::Role")).Value;
+
+        Assert.False(
+            role is IDictionary<string, object> resource
+            && resource["Properties"] is IDictionary<string, object> properties
+            && properties.ContainsKey("ManagedPolicyArns"),
+            "The execution role has an AWS managed policy attached.");
+    }
+
+    /// <summary>
+    /// The role may write to this function's log group, and to no other.
+    /// </summary>
+    /// <remarks>
+    /// The permissions the managed policy above used to carry, scoped to the group the stack
+    /// declares. logs:CreateLogGroup is deliberately not among them: the group is a resource of this
+    /// stack, and a function that cannot create one cannot start logging somewhere nobody is looking.
+    /// </remarks>
+    [Fact]
+    public void The_role_writes_only_to_its_own_log_group()
+    {
+        var logGroup = Assert.Single(Template().FindResources("AWS::Logs::LogGroup")).Key;
+
+        Template().HasResourceProperties("AWS::IAM::Policy", new Dictionary<string, object>
+        {
+            ["PolicyDocument"] = Match.ObjectLike(new Dictionary<string, object>
+            {
+                ["Statement"] = Match.ArrayWith(
+                [
+                    Match.ObjectLike(new Dictionary<string, object>
+                    {
+                        ["Action"] = LogWriteActions,
+                        ["Effect"] = "Allow",
+                        ["Resource"] = new Dictionary<string, object>
+                        {
+                            ["Fn::GetAtt"] = new object[] { logGroup, "Arn" },
+                        },
+                    }),
+                ]),
+            }),
+        });
+    }
+
+    /// <summary>
     /// Every variable the function requires at cold start is set.
     /// </summary>
     /// <remarks>
@@ -429,7 +489,10 @@ public sealed class OrderProcessorConstructTests
         dlqRetentionDays: 14,
         idempotencyRetentionDays: IdempotencyRetentionDays,
         retainData: retainData,
-        enablePointInTimeRecovery: false,
+
+        // Follows retention, because EnvironmentConfig refuses data that outlives its stack without
+        // a way to restore it. These cases vary retention and assert on other resources entirely.
+        enablePointInTimeRecovery: retainData,
         alarmThresholds: AlarmThresholds,
         alarmEndpoint: AlarmEndpoint);
 }

@@ -29,6 +29,12 @@
   <ItemGroup>
     <PackageVersion Include="Amazon.CDK.Lib" Version="2.263.0" />
     <PackageVersion Include="Constructs" Version="10.8.1" />
+    <!--
+      cdk-nag, in the CDK app and its tests. Nothing it touches is deployed: the app runs at synthesis
+      and the rules are evaluated there, which is the point — registering the pack on the app is what
+      makes cdk synth and cdk deploy check the same template the suite does.
+    -->
+    <PackageVersion Include="Cdklabs.CdkNag" Version="3.0.2" />
   </ItemGroup>
 
   <ItemGroup>

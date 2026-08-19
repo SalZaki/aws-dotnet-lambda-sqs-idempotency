@@ -332,6 +332,19 @@ Which configuration a synthesis uses comes from the `environment` CDK context ke
 naming the environments that exist, rather than falling back to the development sizing — deploying
 development retention into a production account is not a failure anyone notices on the day.
 
+### Rule pack
+
+`NagPolicy.Apply` registers cdk-nag's AWS Solutions rules on the app, so every synthesis is
+checked — `cdk synth`, `cdk deploy`, and the test suite alike. cdk-nag 3 packs are policy
+validation plugins rather than aspects, and the older `Aspects.Of(app).Add(pack)` form still shown
+in most guides compiles, runs, and reports nothing at all.
+
+Accepted findings are declared on the resource they cover through `NagPolicy.Accept`, which is the
+CDK's own acknowledgement mechanism rather than a suppression list. The identifier has to be the
+rule exactly as the validation report names it; anything else acknowledges nothing, and the only
+symptom is a finding that will not go away. Which findings are accepted, and why, is in [Security
+Requirements](security.md).
+
 ### CDK CLI
 
 The CLI is a node package and is not the `Amazon.CDK.Lib` the constructs come from, so it is pinned

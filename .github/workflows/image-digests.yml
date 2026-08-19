@@ -1,0 +1,100 @@
+name: image-digests
+
+# The two emulator images are pinned to a digest in C# string literals, which no ecosystem parses and
+# Dependabot therefore never updates. Left alone they decay quietly: the pin keeps working, the tag it
+# names moves on, and the suite goes on certifying an emulator nobody runs any more. This is what
+# notices, weekly, rather than an unrelated change noticing months later.
+#
+# It is not a pull-request check. A tag that moved is news about the world rather than about the
+# change under review, and failing someone's pull request for it would teach people to ignore it.
+
+on:
+  schedule:
+    # Mondays, an hour after the Dependabot runs, so a week's dependency news arrives together.
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  digests:
+    name: Emulator digests
+    runs-on: ubuntu-latest
+
+    env:
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    steps:
+      # Third-party actions are pinned to an immutable commit SHA rather than a
+      # tag, so a moved tag cannot change what runs. Update deliberately.
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Resolving a tag is a registry call and counts against the same anonymous allowance the pulls
+      # do. This job runs on a schedule, so the credentials are always available.
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+
+      # The references are read out of the fixtures rather than repeated here. A copy would be a third
+      # place to update and the one nobody would remember, which is the failure this job exists for.
+      # ContainerImageTests already holds the fixtures and integration.yml in step.
+      - name: Compare each pinned digest against its tag
+        shell: bash
+        run: |
+          checked=0
+          failed=0
+
+          for fixture in tests/ReliableOrders.IntegrationTests/*Fixture.cs; do
+            # The || true is load-bearing: this step runs under -eo pipefail, where a grep that
+            # matches nothing ends the pipeline non-zero and takes the whole job with it, reporting
+            # an exit code and naming neither the file nor what was being looked for.
+            reference=$(grep -oE '[a-z0-9]+[a-z0-9./_-]*:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' "$fixture" | head -1 || true)
+
+            if [ -z "$reference" ]; then
+              echo "$(basename "$fixture") pins no image."
+              continue
+            fi
+
+            checked=$((checked + 1))
+            tag=${reference%@*}
+            pinned=${reference#*@}
+
+            # Captured through an if rather than a bare assignment, for the same reason. A registry
+            # that refuses the call — a rate limit, an expired credential — would otherwise end the
+            # job on the assignment, leaving the remaining images unchecked and the cause unnamed.
+            if ! current=$(docker buildx imagetools inspect "$tag" --format '{{.Manifest.Digest}}' 2>&1); then
+              failed=1
+              echo "::error::$tag could not be resolved: $current"
+              continue
+            fi
+
+            if [ -z "$current" ]; then
+              failed=1
+              echo "::error::$tag resolved to an empty digest, so nothing was compared."
+              continue
+            fi
+
+            if [ "$pinned" = "$current" ]; then
+              echo "$tag is current."
+              continue
+            fi
+
+            failed=1
+            echo "::error::$tag has moved. Pinned $pinned, now $current. Update $(basename "$fixture") and integration.yml together."
+          done
+
+          # A run that checked nothing is the failure this job exists to prevent, arriving as a green
+          # tick. It happens the day a constant is renamed or reformatted past the pattern above.
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::No pinned image reference was found in any fixture, so no digest was checked. The pattern in this workflow and the Image constants have drifted apart."
+            exit 1
+          fi
+
+          echo "Checked $checked image(s)."
+          exit "$failed"

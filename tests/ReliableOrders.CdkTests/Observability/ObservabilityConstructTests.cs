@@ -311,6 +311,42 @@ public sealed class ObservabilityConstructTests
     }
 
     /// <summary>
+    /// The topic refuses anything published over plain HTTP.
+    /// </summary>
+    /// <remarks>
+    /// CloudWatch publishes over HTTPS already, so this changes nothing about how today's alarms are
+    /// delivered. What it removes is a future publisher, or a subscription confirmation, crossing the
+    /// network in the clear — an alarm names a queue, a table and a reason, which describes the system
+    /// to anyone listening. Asserted on the topic policy rather than on a property, because that is
+    /// where the condition lands.
+    /// </remarks>
+    [Fact]
+    public void The_topic_requires_transport_security()
+    {
+        Template().HasResourceProperties(SynthesizedStack.TopicPolicyResourceType, new Dictionary<string, object>
+        {
+            ["PolicyDocument"] = Match.ObjectLike(new Dictionary<string, object>
+            {
+                ["Statement"] = Match.ArrayWith(
+                [
+                    Match.ObjectLike(new Dictionary<string, object>
+                    {
+                        ["Action"] = "sns:Publish",
+                        ["Effect"] = "Deny",
+                        ["Condition"] = new Dictionary<string, object>
+                        {
+                            ["Bool"] = new Dictionary<string, object>
+                            {
+                                ["aws:SecureTransport"] = "false",
+                            },
+                        },
+                    }),
+                ]),
+            }),
+        });
+    }
+
+    /// <summary>
     /// One topic, so that a second subscriber is added in one place.
     /// </summary>
     [Fact]

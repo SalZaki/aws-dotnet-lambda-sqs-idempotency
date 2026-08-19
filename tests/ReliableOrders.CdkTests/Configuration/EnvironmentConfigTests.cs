@@ -71,6 +71,36 @@ public sealed class EnvironmentConfigTests
     }
 
     /// <summary>
+    /// Data that outlives its stack has to be restorable.
+    /// </summary>
+    /// <remarks>
+    /// The pair is a rule rather than a convention because a suppression depends on it. The tables
+    /// accept the point-in-time recovery finding wherever recovery is off, and without this an
+    /// environment that retains its data could be excused by an exception written for one that throws
+    /// it away.
+    /// </remarks>
+    [Fact]
+    public void Retained_data_without_point_in_time_recovery_is_rejected()
+    {
+        var exception = Assert.Throws<ArgumentException>(
+            () => Config(retainData: true, enablePointInTimeRecovery: false));
+
+        Assert.Contains("point-in-time recovery", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Recovery without retention is allowed, which is the direction that costs money rather than data.
+    /// </summary>
+    [Fact]
+    public void Point_in_time_recovery_without_retained_data_is_allowed()
+    {
+        var config = Config(retainData: false, enablePointInTimeRecovery: true);
+
+        Assert.True(config.EnablePointInTimeRecovery);
+        Assert.False(config.RetainData);
+    }
+
+    /// <summary>
     /// Five receives, the documented floor.
     /// </summary>
     [Fact]
@@ -327,7 +357,9 @@ public sealed class EnvironmentConfigTests
         int sourceRetentionDays = 4,
         int dlqRetentionDays = 14,
         AlarmThresholds? alarmThresholds = null,
-        string alarmEndpoint = "alerts@reliable-orders.invalid") =>
+        string alarmEndpoint = "alerts@reliable-orders.invalid",
+        bool retainData = false,
+        bool enablePointInTimeRecovery = false) =>
         new(
             environmentName: "dev",
             lambdaRuntimeIdentifier: "dotnet10",
@@ -342,8 +374,8 @@ public sealed class EnvironmentConfigTests
             sourceRetentionDays: sourceRetentionDays,
             dlqRetentionDays: dlqRetentionDays,
             idempotencyRetentionDays: 30,
-            retainData: false,
-            enablePointInTimeRecovery: false,
+            retainData: retainData,
+            enablePointInTimeRecovery: enablePointInTimeRecovery,
             alarmThresholds: alarmThresholds ?? Thresholds(),
             alarmEndpoint: alarmEndpoint);
 }

@@ -240,7 +240,10 @@ public sealed class MessagingConstructTests
         dlqRetentionDays: DlqRetentionDays,
         idempotencyRetentionDays: 30,
         retainData: retainData,
-        enablePointInTimeRecovery: false,
+
+        // Follows retention, because EnvironmentConfig refuses data that outlives its stack without
+        // a way to restore it. These cases vary retention and assert on other resources entirely.
+        enablePointInTimeRecovery: retainData,
         alarmThresholds: AlarmThresholds,
         alarmEndpoint: AlarmEndpoint);
 }

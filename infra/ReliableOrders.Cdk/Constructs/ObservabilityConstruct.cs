@@ -201,6 +201,13 @@ public sealed class ObservabilityConstruct : Construct
         {
             TopicName = $"reliable-orders-{config.EnvironmentName}-alarms",
             DisplayName = $"Reliable Orders alarms ({config.EnvironmentName})",
+
+            // A topic policy denying anything that did not arrive over TLS. CloudWatch publishes over
+            // HTTPS already, so this changes nothing about how alarms are delivered — what it removes
+            // is the possibility of a future publisher, or a subscription confirmation, crossing the
+            // network in the clear. An alarm names a queue, a table and a reason, which is enough to
+            // describe the system to whoever is listening.
+            EnforceSSL = true,
         });
 
         AlarmTopic.AddSubscription(new EmailSubscription(config.AlarmEndpoint));

@@ -1,0 +1,72 @@
+# Version updates. Security updates are a separate mechanism, already enabled on the repository, and
+# they are deliberately left ungrouped: a CVE fix should arrive as its own pull request rather than
+# wait for whatever else its group is holding.
+
+version: 2
+
+updates:
+  # NuGet resolves through central package management, so every bump lands in
+  # Directory.Packages.props and the per-project lock files are regenerated from it. The directory
+  # is the repository root for that reason, not the project folders.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/London
+    commit-message:
+      prefix: chore(deps)
+    # Grouped by what a reviewer reads together. The AWS SDK and the CDK move on their own weekly
+    # cadences and would otherwise account for most of the noise on their own, and the test
+    # dependencies are the group whose failure mode is contained to a build that will not compile.
+    groups:
+      aws-sdk:
+        patterns:
+          - AWSSDK.*
+          - Amazon.Lambda.*
+      aws-cdk:
+        patterns:
+          - Amazon.CDK.*
+          - Constructs
+      opentelemetry:
+        patterns:
+          - OpenTelemetry*
+      testing:
+        patterns:
+          - xunit*
+          - Microsoft.NET.Test.Sdk
+          - Microsoft.Extensions.TimeProvider.Testing
+          - Testcontainers*
+          - coverlet.collector
+      microsoft-extensions:
+        patterns:
+          - Microsoft.Extensions.*
+
+  # The workflows pin every third-party action to a commit SHA, which no ecosystem resolves and no
+  # human rereads. This is what keeps a pinned SHA from silently becoming an unmaintained one.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/London
+    commit-message:
+      prefix: ci(deps)
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  # The CDK CLI, which is pinned separately from Amazon.CDK.Lib because it releases separately. One
+  # package, so grouping would say nothing.
+  - package-ecosystem: npm
+    directory: /infra/ReliableOrders.Cdk
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/London
+    commit-message:
+      prefix: chore(deps)
