@@ -122,6 +122,16 @@ GitHub Actions the workflows pin, and the npm package that pins the CDK CLI. Ver
 grouped by what a reviewer reads together; security updates are deliberately left ungrouped, so a
 CVE fix arrives as its own pull request rather than waiting for whatever else its group is holding.
 
+A NuGet bump needs a commit on top of what Dependabot proposes, and this is expected rather than a
+misconfiguration. Central package management puts the version in `Directory.Packages.props` while
+each project's lock file records it again as a `CentralTransitive` entry, and Dependabot updates the
+first without the second — so locked-mode restore refuses the result with `NU1004`. Regenerate with
+`dotnet restore ReliableOrders.slnx --force-evaluate` and commit the lock files with the bump.
+
+Groups are matched independently rather than first-fit, so a package can land in two of them at
+once. `Microsoft.Extensions.TimeProvider.Testing` did on the first run, appearing in the testing and
+the microsoft-extensions pull requests together; the second group excludes it by name.
+
 ## Integration Tests
 
 The workflow file is `.github/workflows/integration.yml`. It runs on pull requests, on pushes to
