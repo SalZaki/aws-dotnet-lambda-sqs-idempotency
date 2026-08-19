@@ -39,9 +39,15 @@ updates:
           - Microsoft.Extensions.TimeProvider.Testing
           - Testcontainers*
           - coverlet.collector
+      # Excluding what the testing group above already claims. Dependabot matches a package against
+      # every group rather than the first one that fits, so Microsoft.Extensions.TimeProvider.Testing
+      # arrived in two pull requests at once on the first run — each proposing the same bump, and
+      # whichever merged second would have conflicted with the first.
       microsoft-extensions:
         patterns:
           - Microsoft.Extensions.*
+        exclude-patterns:
+          - Microsoft.Extensions.TimeProvider.Testing
 
   # The workflows pin every third-party action to a commit SHA, which no ecosystem resolves and no
   # human rereads. This is what keeps a pinned SHA from silently becoming an unmaintained one.
