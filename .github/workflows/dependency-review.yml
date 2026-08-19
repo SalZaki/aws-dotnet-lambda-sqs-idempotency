@@ -1,0 +1,42 @@
+name: dependency-review
+
+# What a pull request adds to the dependency graph, checked before it merges rather than reported
+# against main afterwards. Separate from ci.yml because it gates a different thing: that gate says
+# the code builds and passes, this one says the graph it builds against is one we accept.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    steps:
+      # Third-party actions are pinned to an immutable commit SHA rather than a
+      # tag, so a moved tag cannot change what runs. Update deliberately.
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # NuGet is already gated harder than this: NuGetAudit runs at audit level low over the whole
+      # transitive graph and warnings are errors, so a .NET package carrying any advisory fails the
+      # restore in ci.yml before this workflow has an opinion. What this adds is the two ecosystems
+      # that restore never sees — the pinned actions, and the CDK CLI under infra — and a diff-scoped
+      # report on the pull request that introduced them.
+      #
+      # High rather than low, because the level that blocks here should be the level that is worth
+      # blocking a merge on. NuGetAudit keeps the stricter number where it can act on it.
+      #
+      # The findings go to the run summary rather than a pull request comment. Commenting would need
+      # pull-requests: write, which is a token this job has no other use for, and the check turning
+      # red is what a reader follows either way.
+      - name: Review the dependency diff
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high

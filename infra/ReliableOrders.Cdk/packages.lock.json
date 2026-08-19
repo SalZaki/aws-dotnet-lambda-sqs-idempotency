@@ -15,6 +15,17 @@
           "Constructs": "[10.5.0, 11.0.0)"
         }
       },
+      "Cdklabs.CdkNag": {
+        "type": "Direct",
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "CAPfcZOcmlDNVCHf9pUiGjNcawWtX6RM5ucOyioqCHbM7iywSo8H31SBxtl3xiEL3fCVtghTkb//u9WjGK11kA==",
+        "dependencies": {
+          "Amazon.CDK.Lib": "[2.257.0, 3.0.0)",
+          "Amazon.JSII.Runtime": "[1.139.0, 2.0.0)",
+          "Constructs": "[10.5.1, 11.0.0)"
+        }
+      },
       "Constructs": {
         "type": "Direct",
         "requested": "[10.8.1, )",

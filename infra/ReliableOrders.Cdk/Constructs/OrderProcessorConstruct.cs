@@ -75,8 +75,27 @@ public sealed class OrderProcessorConstruct : Construct
             RemovalPolicy = config.RetainData ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
         });
 
+        // Declared, because the role CDK creates by default attaches the AWS managed
+        // AWSLambdaBasicExecutionRole. That policy grants logs:CreateLogGroup across the account and
+        // writes to any log group in it, which is more than a function with a log group of its own
+        // has any use for — and docs/security.md commits this stack to least privilege rather than to
+        // whatever a managed policy is widened to next. The permissions it replaces are granted
+        // below, against this function's log group.
+        var role = new Role(this, "FunctionRole", new RoleProps
+        {
+            AssumedBy = new ServicePrincipal("lambda.amazonaws.com"),
+            Description = $"Execution role for the {ServiceName} order processor.",
+        });
+
+        // The group is created above rather than by the runtime on first invocation, so the function
+        // needs to write streams into it and nothing more. logs:CreateLogGroup is deliberately absent:
+        // a function that cannot create one cannot log somewhere nobody is looking for it.
+        logs.GrantWrite(role);
+
         Function = new Function(this, "OrderProcessorFunction", new FunctionProps
         {
+            Role = role,
+
             Runtime = new Runtime(config.LambdaRuntimeIdentifier, RuntimeFamily.DOTNET_CORE),
             Handler = Handler,
             Code = code,
@@ -126,6 +145,17 @@ public sealed class OrderProcessorConstruct : Construct
             Actions = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"],
             Resources = ["*"],
         }));
+
+        // The rule asks for evidence beside the wildcard, which is the paragraph above: X-Ray defines
+        // no resource for either action, so no scoped statement exists to write instead. Scoped to
+        // Resource::* on this role, so the next wildcard added here fails the build rather than
+        // inheriting this exception — which is the whole reason the rule is granular.
+        NagPolicy.Accept(
+            role,
+            "AwsSolutions-IAM5[Resource::*]",
+            "xray:PutTraceSegments and xray:PutTelemetryRecords take segments rather than a resource "
+            + "ARN, so AWS defines no resource to scope them to. Recorded as the one unscoped "
+            + "permission in docs/security.md.");
 
         // The event source grants the consume permissions itself, which is why the role is not given
         // queue actions above.

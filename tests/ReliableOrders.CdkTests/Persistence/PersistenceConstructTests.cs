@@ -127,7 +127,9 @@ public sealed class PersistenceConstructTests
     [InlineData(false, "Delete")]
     public void The_tables_survive_the_stack_where_data_is_retained(bool retainData, string expected)
     {
-        var template = Template(retainData);
+        // Recovery follows retention, because EnvironmentConfig refuses retained data without it. This
+        // case is about what happens to the table when the stack goes, not about backups.
+        var template = Template(retainData, pointInTimeRecovery: retainData);
 
         foreach (var partitionKey in new[] { PersistenceConstruct.OrderIdAttribute, PersistenceConstruct.IdempotencyKeyAttribute })
         {

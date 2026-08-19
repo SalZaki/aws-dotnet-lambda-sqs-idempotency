@@ -123,6 +123,20 @@ public sealed record EnvironmentConfig
                 nameof(maxConcurrency));
         }
 
+        // An environment whose data survives the stack has to be recoverable to a point in time. The
+        // pair matters because the DDB3 suppression below is written against it: a table without
+        // point-in-time recovery is an accepted finding only where losing the table is accepted too,
+        // and without this rule a production configuration could leave both off and be excused by a
+        // suppression that was written for development.
+        if (retainData && !enablePointInTimeRecovery)
+        {
+            throw new ArgumentException(
+                "Data is retained but point-in-time recovery is off. An environment whose tables "
+                + "outlive their stack has to be restorable, and a suppression written for a "
+                + "disposable environment would otherwise cover this one.",
+                nameof(enablePointInTimeRecovery));
+        }
+
         if (dlqRetentionDays <= sourceRetentionDays)
         {
             throw new ArgumentException(

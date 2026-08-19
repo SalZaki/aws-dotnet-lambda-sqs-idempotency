@@ -20,7 +20,7 @@ The workflow file is `.github/workflows/ci.yml`.
 8. Publish the function with `dotnet publish src/ReliableOrders.Function -c Release --no-build`.
 9. Install the pinned CDK CLI and run `cdk synth`.
 10. Upload the TRX reports and the coverage report.
-11. Run security and dependency checks. Owned by #35, and not present yet.
+11. Security and dependency checks, which run as workflows of their own rather than steps here.
 12. Never assume a privileged AWS deployment role from an untrusted fork.
 
 Container-backed tests are **not** in this gate. They pull large images and start containers, which
@@ -43,6 +43,10 @@ The CDK assertion tests build the stack in process, which catches a construct th
 catches what they cannot: a `cdk.json` the app can no longer be run through, and a CLI that has
 moved past the library. A template that no longer synthesises then fails the pull request rather
 than the deployment.
+
+Step 9 also runs the cdk-nag rules, because the pack is registered on the app rather than on a test
+harness — see [Security Requirements](security.md). A finding nobody has accepted fails the
+synthesis, so it fails this gate and any deployment equally.
 
 ### Reporting
 
@@ -78,6 +82,45 @@ A branch has to be up to date with `main` before it merges. The cost is a rebase
 lands behind another; what it buys is catching a change that passes on its own branch and fails once
 merged, which no other check in this list can see — and that is how `main` came to not compile once
 already.
+
+## Dependency Review
+
+The workflow file is `.github/workflows/dependency-review.yml`. It runs on pull requests and fails on
+a finding of high severity or above.
+
+NuGet is already gated harder elsewhere: `NuGetAudit` runs at audit level `low` over the whole
+transitive graph with warnings as errors, so a .NET package carrying any advisory fails the restore
+in the gate above before this workflow has an opinion. What this adds is the two ecosystems restore
+never sees — the pinned actions, and the CDK CLI under `infra` — and a diff-scoped report on the
+pull request that introduced them. It keeps a read-only token: commenting would need
+`pull-requests: write`, and the check turning red is what a reader follows either way.
+
+CodeQL runs from GitHub's default setup rather than a workflow in this repository, over `actions` and
+`csharp`, and reports as `Analyze (actions)` and `Analyze (csharp)`.
+
+## Emulator Digests
+
+The workflow file is `.github/workflows/image-digests.yml`. It runs weekly and on demand, resolves
+each pinned emulator digest against the tag beside it, and fails naming any that has moved.
+
+The references are read out of the fixtures rather than repeated in the workflow, because a copy
+would be a third place to update and the one nobody would remember. Dependabot cannot do this:
+`DynamoDbFixture.Image` and `LocalStackFixture.Image` are C# string literals rather than a manifest
+any ecosystem parses. It is deliberately not a pull-request check — a tag that moved is news about
+the world rather than about the change under review, and failing someone's pull request for it
+teaches people to ignore it.
+
+Three outcomes fail it, not one: a digest that has moved, a tag the registry would not resolve, and
+a run that found no pinned reference at all. The last is the one worth stating, because a constant
+renamed past the workflow's pattern would otherwise report a green tick over nothing checked, which
+is the decay this job exists to catch rather than a state it should report as healthy.
+
+## Dependency Updates
+
+Dependabot's configuration is `.github/dependabot.yml`, covering NuGet at the repository root, the
+GitHub Actions the workflows pin, and the npm package that pins the CDK CLI. Version updates are
+grouped by what a reviewer reads together; security updates are deliberately left ungrouped, so a
+CVE fix arrives as its own pull request rather than waiting for whatever else its group is holding.
 
 ## Integration Tests
 

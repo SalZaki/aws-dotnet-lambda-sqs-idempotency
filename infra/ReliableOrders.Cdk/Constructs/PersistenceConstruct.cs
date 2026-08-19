@@ -54,6 +54,21 @@ public sealed class PersistenceConstruct : Construct
             this,
             "IdempotencyRecordsTable",
             Common(config, IdempotencyKeyAttribute, ExpirationAttribute));
+
+        // Point-in-time recovery is a per-environment setting, so the finding it raises is accepted
+        // only in the environments that turned it off. Written as a condition rather than a standing
+        // exception: an environment that enables recovery carries no suppression at all, and
+        // EnvironmentConfig refuses the combination that would make this excuse the wrong thing —
+        // retained data without recovery.
+        if (!config.EnablePointInTimeRecovery)
+        {
+            NagPolicy.Accept(
+                this,
+                "AwsSolutions-DDB3",
+                "This environment sets EnablePointInTimeRecovery to false. Its data does not outlive "
+                + "the stack, which EnvironmentConfig enforces, so continuous backups would bill for "
+                + "restoring rows nothing depends on.");
+        }
     }
 
     /// <summary>One row per order, keyed by <see cref="OrderIdAttribute"/>.</summary>
