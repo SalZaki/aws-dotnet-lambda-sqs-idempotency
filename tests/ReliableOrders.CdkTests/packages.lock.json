@@ -4,14 +4,14 @@
     "net10.0": {
       "Amazon.CDK.Lib": {
         "type": "Direct",
-        "requested": "[2.263.0, )",
-        "resolved": "2.263.0",
-        "contentHash": "WYxmt3fOuHCuqVyQSwPVGh2ZRH0Enm0chXIM5Hh0sTpj3JcBB8bwT/oVCB6KBa6dNezsiGLMNnB0aZsN6d3Ovw==",
+        "requested": "[2.266.0, )",
+        "resolved": "2.266.0",
+        "contentHash": "4nuf/ehTrPfbPWOWRFkipx+YJ52Uwn6y7UbaWBnwfv0CBkTQ4SjGs32MwPI53yRtMJfRSozJQTU9wE5b8AeoFg==",
         "dependencies": {
-          "Amazon.CDK.Asset.AwsCliV1": "[2.2.282]",
+          "Amazon.CDK.Asset.AwsCliV1": "[2.2.292]",
           "Amazon.CDK.Asset.NodeProxyAgentV6": "[2.1.2, 3.0.0)",
           "Amazon.CDK.CloudAssembly.Schema": "[54.11.0, 55.0.0)",
-          "Amazon.JSII.Runtime": "[1.138.0, 2.0.0)",
+          "Amazon.JSII.Runtime": "[1.139.0, 2.0.0)",
           "Constructs": "[10.5.0, 11.0.0)"
         }
       },
@@ -53,10 +53,10 @@
       },
       "Amazon.CDK.Asset.AwsCliV1": {
         "type": "Transitive",
-        "resolved": "2.2.282",
-        "contentHash": "cVwuMPWEKL7UucdTr9dQsZosf/5h649wBogs/yISV7frMCpUQyiqHw8EWdxs05Sd/9fZN+GQmeCZpV3H37WGqw==",
+        "resolved": "2.2.292",
+        "contentHash": "W0nD1GZzxspjnHzkyuZpwvgR2XSqg7K4GONsWeM2FzEXyo+8b//rOuJvXDsr93LtMXcDdbGGyIFmz0q1p17+eg==",
         "dependencies": {
-          "Amazon.JSII.Runtime": "[1.130.0, 2.0.0)"
+          "Amazon.JSII.Runtime": "[1.139.0, 2.0.0)"
         }
       },
       "Amazon.CDK.Asset.NodeProxyAgentV6": {
@@ -359,7 +359,7 @@
       "reliableorders.cdk": {
         "type": "Project",
         "dependencies": {
-          "Amazon.CDK.Lib": "[2.263.0, )",
+          "Amazon.CDK.Lib": "[2.266.0, )",
           "Cdklabs.CdkNag": "[3.0.2, )",
           "Constructs": "[10.8.1, )"
         }

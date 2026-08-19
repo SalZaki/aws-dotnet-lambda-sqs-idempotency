@@ -27,7 +27,7 @@
     repository derives from it.
   -->
   <ItemGroup>
-    <PackageVersion Include="Amazon.CDK.Lib" Version="2.263.0" />
+    <PackageVersion Include="Amazon.CDK.Lib" Version="2.266.0" />
     <PackageVersion Include="Constructs" Version="10.8.1" />
     <!--
       cdk-nag, in the CDK app and its tests. Nothing it touches is deployed: the app runs at synthesis
