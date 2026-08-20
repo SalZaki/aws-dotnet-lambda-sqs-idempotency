@@ -41,9 +41,9 @@ jobs:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
 
-      # The references are read out of the fixtures rather than repeated here. A copy would be a third
+      # The references are read out of the fixtures rather than repeated here. A copy would be a fourth
       # place to update and the one nobody would remember, which is the failure this job exists for.
-      # ContainerImageTests already holds the fixtures and integration.yml in step.
+      # ContainerImageTests already holds the fixtures, integration.yml and compose.yaml in step.
       - name: Compare each pinned digest against its tag
         shell: bash
         run: |
@@ -86,7 +86,7 @@ jobs:
             fi
 
             failed=1
-            echo "::error::$tag has moved. Pinned $pinned, now $current. Update $(basename "$fixture") and integration.yml together."
+            echo "::error::$tag has moved. Pinned $pinned, now $current. Update $(basename "$fixture"), integration.yml and compose.yaml together."
           done
 
           # A run that checked nothing is the failure this job exists to prevent, arriving as a green

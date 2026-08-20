@@ -16,8 +16,8 @@ namespace ReliableOrders.Cdk.Configuration;
 /// <para>
 /// The cost of not bundling is that synthesis can silently package the wrong thing, so it does not
 /// silently do anything. A missing directory fails naming the publish command, and so does one that
-/// holds no function assembly — which is what an interrupted publish, or a publish to another
-/// configuration, leaves behind.
+/// is missing either of the two files the runtime cannot start without — which is what an interrupted
+/// publish, or a publish to another configuration, leaves behind.
 /// </para>
 /// </remarks>
 public static class FunctionAsset
@@ -25,8 +25,20 @@ public static class FunctionAsset
     /// <summary>The project whose publish output is deployed.</summary>
     public const string ProjectDirectory = "src/ReliableOrders.Function";
 
-    /// <summary>The assembly the handler lives in, and the one file the package cannot be missing.</summary>
+    /// <summary>The assembly the handler lives in, and one of the two files the package cannot be missing.</summary>
     public const string FunctionAssembly = "ReliableOrders.Function.dll";
+
+    /// <summary>
+    /// The runtime configuration the .NET runtime loads the assembly through.
+    /// </summary>
+    /// <remarks>
+    /// The other file the package cannot be missing, and the one a reader would not think to look
+    /// for. A class library emits no runtime configuration by default, and without it the Lambda
+    /// bootstrap refuses the package before the handler is resolved — reported as a missing
+    /// <c>.runtimeconfig.json</c> rather than as anything about the function. The project asks for it
+    /// explicitly; this is what notices if that line is ever removed.
+    /// </remarks>
+    public const string RuntimeConfiguration = "ReliableOrders.Function.runtimeconfig.json";
 
     /// <summary>The command that produces it.</summary>
     public const string PublishCommand =
@@ -58,8 +70,8 @@ public static class FunctionAsset
     /// </summary>
     /// <param name="repositoryRoot">The directory <see cref="PublishDirectory"/> is relative to.</param>
     /// <exception cref="InvalidOperationException">
-    /// The directory is absent, or holds no function assembly. The message names the command that
-    /// fills it.
+    /// The directory is absent, or is missing the handler's assembly or its runtime configuration. The
+    /// message names the file and the command that produces it.
     /// </exception>
     public static Code FromPublishOutput(string repositoryRoot)
     {
@@ -73,17 +85,32 @@ public static class FunctionAsset
                 $"The function has not been published. Expected '{path}'. Run {PublishCommand}.");
         }
 
-        // The assembly by name rather than a count of files. An interrupted publish, or one that left
-        // only the dependencies behind, is not empty and would deploy a package the runtime cannot
-        // find a handler in — which fails on the first message rather than at synthesis.
-        if (!File.Exists(Path.Combine(path, FunctionAssembly)))
-        {
-            throw new InvalidOperationException(
-                $"'{path}' holds no {FunctionAssembly}, so the deployed function would have no handler "
-                + $"to run. Run {PublishCommand}.");
-        }
+        // Named files rather than a count of them. An interrupted publish, or one that left only the
+        // dependencies behind, is not empty and would deploy a package the runtime cannot start —
+        // which fails on the first message rather than at synthesis.
+        Require(path, FunctionAssembly, "the deployed function would have no handler to run");
+
+        Require(
+            path,
+            RuntimeConfiguration,
+            "the .NET runtime would refuse the package before it resolved the handler");
 
         return Code.FromAsset(path);
+    }
+
+    /// <summary>
+    /// Fails naming a file the package cannot be deployed without.
+    /// </summary>
+    /// <param name="path">The publish directory.</param>
+    /// <param name="fileName">What has to be in it.</param>
+    /// <param name="consequence">What its absence would cost, so the message says why it matters.</param>
+    private static void Require(string path, string fileName, string consequence)
+    {
+        if (!File.Exists(Path.Combine(path, fileName)))
+        {
+            throw new InvalidOperationException(
+                $"'{path}' holds no {fileName}, so {consequence}. Run {PublishCommand}.");
+        }
     }
 
     /// <summary>

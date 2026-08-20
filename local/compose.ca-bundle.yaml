@@ -1,0 +1,31 @@
+# An overlay for a workstation behind a TLS-inspecting proxy — Zscaler, Netskope, and the like.
+#
+#   docker compose -f compose.yaml -f local/compose.ca-bundle.yaml up
+#
+# LocalStack activates its licence over HTTPS to api.localstack.cloud, and an interceptor re-signs
+# that call with a certificate the container has no reason to trust. The symptom is exit code 55 and
+# a message naming a licensing server it cannot reach, which reads as an outage rather than as a
+# trust failure. LocalStackFixture carries the same two knobs for the test suite, and the SQS
+# Emulation section of docs/testing-strategy.md explains both — including that the root the vendor
+# publishes is not always the copy already installed on the host, and that mounting the wrong one
+# changes the error rather than fixing it.
+#
+# A separate file rather than an optional mount in compose.yaml. There is no way to express "mount
+# this only if the variable is set", and every stand-in for one is worse than asking: an empty file
+# mounted as the bundle leaves the container trusting nothing at all, which is a harder failure to
+# read than the one it was meant to prevent.
+#
+# Nothing is committed. The certificate belongs to the network rather than to this repository, and
+# SSL_NO_VERIFY — LocalStack's own escape hatch — is deliberately set nowhere here.
+
+services:
+  sqs:
+    volumes:
+      - ${LOCALSTACK_CA_BUNDLE:?point it at the root certificate of this machine's TLS interceptor, or drop this file from the command}:/etc/ssl/certs/corp-ca.crt:ro
+    environment:
+      # Three variables rather than one, because three clients inside the image make outbound calls
+      # and each reads its own: Python's requests, curl, and Node. Setting only the one that happens
+      # to fail first moves the failure rather than fixing it.
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/corp-ca.crt
+      CURL_CA_BUNDLE: /etc/ssl/certs/corp-ca.crt
+      NODE_EXTRA_CA_CERTS: /etc/ssl/certs/corp-ca.crt

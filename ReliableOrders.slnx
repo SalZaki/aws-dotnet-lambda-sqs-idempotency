@@ -10,6 +10,9 @@
   <Folder Name="/infra/">
     <Project Path="infra/ReliableOrders.Cdk/ReliableOrders.Cdk.csproj" />
   </Folder>
+  <Folder Name="/local/">
+    <Project Path="local/ReliableOrders.Local/ReliableOrders.Local.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/ReliableOrders.Aws/ReliableOrders.Aws.csproj" />
     <Project Path="src/ReliableOrders.Core/ReliableOrders.Core.csproj" />

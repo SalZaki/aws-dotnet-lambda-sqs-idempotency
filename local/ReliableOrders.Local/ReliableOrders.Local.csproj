@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ReliableOrders.Local</RootNamespace>
+    <Description>
+      The local development stack's own program. It provisions the emulated queues and tables, and
+      then stands in for the Lambda event source mapping by reading batches off the queue, invoking
+      the function through the runtime interface emulator, and acting on the response. Nothing here
+      is deployed; see the Local Development Stack section of docs/testing-strategy.md.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Core for the two table schemas, so provisioning cannot create a shape the writer does not
+      write. Function for the names of the environment variables it reads: the tables this program
+      creates are the tables that function was told to use, and reading both from one set of
+      constants means a rename fails this build rather than the first message of a demonstration.
+    -->
+    <ProjectReference Include="..\..\src\ReliableOrders.Core\ReliableOrders.Core.csproj" />
+    <ProjectReference Include="..\..\src\ReliableOrders.Function\ReliableOrders.Function.csproj" />
+  </ItemGroup>
+
+  <!--
+    The queue naming and the redrive setting are copies of what the CDK deploys, and LocalStackParityTests
+    is what holds the copies honest. It synthesises the development stack and compares the template
+    against the constants here, which are internal because nothing outside this program has business
+    calling them.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="ReliableOrders.CdkTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.DynamoDBv2" />
+    <PackageReference Include="AWSSDK.SQS" />
+  </ItemGroup>
+
+</Project>

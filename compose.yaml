@@ -1,0 +1,214 @@
+# The local development stack. It runs the reliability flows by hand, without an AWS account, and it
+# is what the demonstration in the README drives.
+#
+# The test suite needs none of this: Testcontainers starts and disposes what it needs from code, and
+# `dotnet test` on a machine with Docker is the whole story there. This exists for running the
+# service by hand.
+#
+# Which emulator serves which service is load-bearing rather than a preference. SQS is on LocalStack
+# because Amazon publishes no SQS emulator; DynamoDB is on amazon/dynamodb-local because the entire
+# duplicate-versus-conflict classification path reads CancellationReasons, LocalStack is not
+# dependable there, and a stack that served DynamoDB from it would demonstrate this project's central
+# claim against an emulator that cannot be trusted to implement it. See the SQS Emulation section of
+# docs/testing-strategy.md.
+
+name: reliable-orders
+
+# Neither emulator authenticates anything, and the SDK requires credentials regardless. They are
+# obviously fake so that nobody reads this as a place real ones could be needed: nothing in this
+# stack reaches an AWS account, and the endpoint variables below are set for the same reason — unset,
+# the SDK would resolve the real service on whatever credentials the machine carries.
+x-emulated-aws: &emulated-aws
+  AWS_ACCESS_KEY_ID: local
+  AWS_SECRET_ACCESS_KEY: local
+  AWS_REGION: eu-west-2
+  AWS_DEFAULT_REGION: eu-west-2
+
+# The two table names, in one place because three services read them: the function writes through
+# them, and the provisioning step creates what the function was told to use. They are configuration
+# rather than a restatement — the deployed tables carry names CloudFormation generates, which is why
+# the function reads them from its environment at all.
+x-tables: &tables
+  ORDERS_TABLE_NAME: reliable-orders-local-orders
+  IDEMPOTENCY_TABLE_NAME: reliable-orders-local-idempotency
+
+services:
+  # SQS, and nothing else. The image carries every service and loading the rest would add startup
+  # time and memory for services nothing here calls.
+  #
+  # An auth token is required, and behind a TLS interceptor a certificate is too. Neither is restated
+  # here: LocalStackFixture carries both knobs for the test suite and documents the exit code 55 that
+  # their absence produces, local/compose.ca-bundle.yaml is the overlay that mounts the certificate,
+  # and the SQS Emulation section of docs/testing-strategy.md has the reasoning — including the trap
+  # that makes the obvious fix for the certificate look as though it did nothing. The free tier covers
+  # everything this stack does.
+  #
+  # Pinned to the digest LocalStackFixture pins, and ContainerImageTests holds this file, the fixture
+  # and integration.yml in step. A moving tag would let a future push change the emulator behaviour
+  # the suite certifies, under a stack that still looked correct.
+  sqs:
+    image: localstack/localstack:2026.07.4@sha256:f7b778d03717b58c3adce81a740bfafff5c6f9d639159bbf08da557c9ac1b513
+    ports:
+      # Published so the AWS CLI on the host can send and read messages, which is how the README
+      # drives every flow.
+      - "4566:4566"
+    environment:
+      <<: *emulated-aws
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?set it from https://app.localstack.cloud; the free tier covers this stack, and without it the container exits 55 before opening its edge port}
+      SERVICES: sqs
+      # Loaded at startup rather than on first call, so the first send does not wait for it.
+      EAGER_SERVICE_LOADING: "1"
+      # Queue URLs as a path on the host that was called, rather than under
+      # sqs.<region>.localhost.localstack.cloud. The SDK follows the URL a CreateQueue response
+      # returns, and the default strategy returns a hostname that resolves to neither the container
+      # nor the host, so every call after the first would go nowhere.
+      SQS_ENDPOINT_STRATEGY: path
+      # The certificate for localhost.localstack.cloud, which the strategy above means nothing here
+      # resolves and no client here presents. Skipping it removes an outbound call from startup.
+      SKIP_SSL_CERT_DOWNLOAD: "1"
+      # Usage analytics, off for the same reason no AWS credential is configured anywhere here.
+      DISABLE_EVENTS: "1"
+      DEBUG: "0"
+    # No Docker socket is mounted. LocalStack needs one to run Lambda or ECS, and this stack runs
+    # neither there: the function is a container of its own, below.
+
+  # The official Amazon emulator, in memory. Each `docker compose up` starts from nothing, so a flow
+  # cannot appear to work because of a row an earlier session left behind — and the duplicate and
+  # conflict flows are demonstrated within one session, which is what they are about.
+  #
+  # Pinned to the digest DynamoDbFixture pins, for the reason given on the SQS image above.
+  dynamodb:
+    image: amazon/dynamodb-local:3.3.1@sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory"]
+    ports:
+      # Published so the AWS CLI on the host can read the rows a flow wrote, which is the half of
+      # every flow that shows what actually happened.
+      - "8000:8000"
+
+  # The deployed artifact, on the base image AWS publishes for the runtime it is deployed to, driven
+  # through the runtime interface emulator that image carries. The handler, the source-generated
+  # serializer and the ILambdaContext the deadline is computed from are all the real ones; the event
+  # source mapping in front of it is the stand-in.
+  function:
+    build:
+      context: .
+      dockerfile: local/Dockerfile
+      target: function
+    environment:
+      <<: [*emulated-aws, *tables]
+      # Where the DynamoDB client resolves to. The SDK reads this itself, so the composition root
+      # needs no local branch and the container runs the same code path a deployment does.
+      AWS_ENDPOINT_URL_DYNAMODB: http://dynamodb:8000
+      ENVIRONMENT: local
+      # The service name and metrics namespace OrderProcessorConstruct deploys, so a log line or an
+      # embedded metric read here carries the same labels it would in an account.
+      POWERTOOLS_SERVICE_NAME: reliable-orders
+      METRICS_NAMESPACE: ReliableOrders
+      # The one dimension worth turning up locally: the flows are read from the log, and Debug is
+      # where the per-record decisions are.
+      LOG_LEVEL: Debug
+      # The events in samples/ carry fixed timestamps, because their hashes are what several suites
+      # assert on and a moving clock would move them. Production's window is a day ahead and five days
+      # behind — the source queue's retention plus one — so the fixtures age out of it within a week
+      # of being written, and a local stack that rejected them would demonstrate the skew rule rather
+      # than the idempotency model this exists to show. Widened here and nowhere else: the deployed
+      # function is given neither skew variable, so the default the specification chose applies.
+      #
+      # A year is the most EventSkewWindow accepts, so this is a ceiling rather than a choice, and it
+      # is a fuse: once the fixtures are more than a year old the stack rejects them and they have to
+      # be re-dated — which moves their hashes, and so the vectors in tests/.../hash-vectors.json.
+      MAX_EVENT_SKEW_PAST_DAYS: "365"
+      # The timeout EnvironmentConfig.Development deploys. The runtime interface emulator both reports
+      # this through ILambdaContext.RemainingTime and enforces it, so the deadline the handler holds
+      # back its margin against is the deployed one and the deferral path can actually be reached
+      # here. Left unset the emulator picks its own, far larger, and that path becomes unreachable
+      # while the stack still looked faithful. LocalStackParityTests holds it to the CDK.
+      AWS_LAMBDA_FUNCTION_TIMEOUT: "30"
+      # No collector runs beside this container, and OTEL_SDK_DISABLED is the standard switch the
+      # composition root documents. Spans are still started; nothing exports them. Tracing is
+      # demonstrated against a real account in Story #32, where there is an X-Ray to look at.
+      OTEL_SDK_DISABLED: "true"
+    depends_on:
+      - dynamodb
+
+  # Creates the queues, the redrive policy and the two tables, then exits. It runs to completion
+  # before the mapping starts, so the mapping resolves a queue rather than creating a second one.
+  #
+  # None of what it creates is described here. The table shapes come from the schema types the writer
+  # writes through, and the queue names and redrive setting from constants held in step with the CDK
+  # by LocalStackParityTests — a copy in this file would be a second, weaker authority beside both.
+  provision:
+    build:
+      context: .
+      dockerfile: local/Dockerfile
+      target: mapping
+    command: ["provision"]
+    restart: "no"
+    environment:
+      <<: [*emulated-aws, *tables]
+      AWS_ENDPOINT_URL_SQS: http://sqs:4566
+      AWS_ENDPOINT_URL_DYNAMODB: http://dynamodb:8000
+      # Names the queue pair, the way the deployed environment name does.
+      ENVIRONMENT: local
+      # Required by the configuration this program shares with the function, and unused by it.
+      FUNCTION_INVOCATION_URL: http://function:8080/2015-03-31/functions/function/invocations
+    depends_on:
+      - sqs
+      - dynamodb
+
+  # Stands in for the Lambda event source mapping: reads a batch off the queue, invokes the function
+  # with it, and acts on the response — deleting every record the response does not name and leaving
+  # the ones it does. That last part is what gives a batch response consequences.
+  #
+  # It is a stand-in and not a claim. It batches the way the deployed mapping batches, because what a
+  # batch is decides what a batch response demonstrates; concurrency and scaling are not modelled, and
+  # Story #32 is where the real mapping is exercised against a real account.
+  mapping:
+    build:
+      context: .
+      dockerfile: local/Dockerfile
+      target: mapping
+    command: ["run"]
+    environment:
+      <<: [*emulated-aws, *tables]
+      AWS_ENDPOINT_URL_SQS: http://sqs:4566
+      AWS_ENDPOINT_URL_DYNAMODB: http://dynamodb:8000
+      ENVIRONMENT: local
+      FUNCTION_INVOCATION_URL: http://function:8080/2015-03-31/functions/function/invocations
+      # The records one invocation is given, matching EnvironmentConfig.Development.BatchSize.
+      BATCH_SIZE: "10"
+    depends_on:
+      provision:
+        condition: service_completed_successfully
+      function:
+        condition: service_started
+
+  # The AWS CLI, pointed at both emulators, for the commands in the README that publish an event and
+  # read what it did. Under a profile, so `docker compose up` does not start it.
+  #
+  #   docker compose run --rm cli sqs get-queue-url --queue-name reliable-orders-local
+  #
+  # It exists so the stack needs Docker and nothing else. A CLI installed on the host does the same
+  # job against localhost:4566 and localhost:8000, and the README gives both.
+  #
+  # Pinned like the emulators, and for a weaker reason: nothing here certifies its behaviour, so it is
+  # absent from ContainerImageTests and from the weekly digest check. It is pinned because an image
+  # reference in this repository names a digest.
+  cli:
+    image: amazon/aws-cli:2.36.27@sha256:be4059632dbcc8c5a94b2ac93aee02a9b09d51c85ac764df65412db266a8bd6e
+    profiles:
+      - cli
+    volumes:
+      # Read-only, and only so that `--message-body file:///repo/samples/...` reaches the events in
+      # samples/ without a shell substitution on the host. Nothing writes through it.
+      - .:/repo:ro
+    environment:
+      <<: *emulated-aws
+      AWS_ENDPOINT_URL_SQS: http://sqs:4566
+      AWS_ENDPOINT_URL_DYNAMODB: http://dynamodb:8000
+      # Text rather than the default JSON, so a single value can be captured into a shell variable
+      # without a JSON parser on the host. The README asks for JSON explicitly where it wants it.
+      AWS_DEFAULT_OUTPUT: text
+    depends_on:
+      - sqs
+      - dynamodb

@@ -1,0 +1,24 @@
+# The build stage copies the source and restores inside the image. Anything a host build left behind
+# is either useless there or actively harmful: an obj directory carries absolute paths from the
+# machine that wrote it, and restoring over one fails in ways that read as a broken Dockerfile.
+**/bin/
+**/obj/
+**/cdk.out/
+**/node_modules/
+**/TestResults/
+**/test-results/
+
+.git/
+.github/
+.idea/
+.vs/
+.vscode/
+
+docs/
+infra/
+tests/
+scripts/
+
+# The samples are published from the host, by the commands in the README, against the queue this
+# stack exposes. Nothing inside either image reads them.
+samples/

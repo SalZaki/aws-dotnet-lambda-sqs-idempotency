@@ -281,6 +281,67 @@ is added next.
 8. Verify custom metrics appear.
 9. Verify the stack can be destroyed cleanly in an ephemeral environment.
 
+## The Local Development Stack
+
+`compose.yaml` runs the reliability flows by hand, with no AWS account. It is not part of any test
+level: Testcontainers starts and disposes what the suite needs from code, and nothing in `dotnet
+test` reads this file. It exists so the flows can be watched rather than only asserted, and so the
+demonstration in the README has something to demonstrate against. The README carries the commands.
+
+The emulator split is the same one this document argues for above, and for the same reason. SQS is on
+LocalStack because Amazon publishes none; DynamoDB is on `amazon/dynamodb-local` because the whole
+duplicate-versus-conflict path reads `CancellationReasons`. A stack that served DynamoDB from
+LocalStack would demonstrate this project's central claim against an emulator that cannot be trusted
+to implement it, which is worse than demonstrating nothing. Both images are pinned to the digests the
+fixtures pin, and `ContainerImageTests` now holds three places in step rather than two.
+
+**What is real.** The function runs on `public.ecr.aws/lambda/dotnet:10`, the base image AWS publishes
+for the runtime `EnvironmentConfig` deploys to, driven through the runtime interface emulator that
+image carries. The handler, the source-generated serializer, the `ILambdaContext` the deadline is
+computed from, the DynamoDB transaction and its cancellation reasons are all the deployed ones. The
+AWS SDK resolves `AWS_ENDPOINT_URL_DYNAMODB` itself, so the composition root has no local branch in
+it and the container runs the same code path an account does.
+
+The invocation timeout is part of that, and it takes a setting to be. The emulator both reports its
+own timeout through `RemainingTime` and enforces it, and left alone it picks one several minutes
+long — under which `ProcessingDeadline` never reaches its margin and the deadline-deferral path is
+unreachable while everything still passes. The stack sets it to the deployed value, and
+`LocalStackParityTests` holds the two together.
+
+**What is a stand-in.** The event source mapping, and only that. `ReliableOrders.Local` reads a batch,
+invokes the function, and applies the response — deleting every record the response does not name and
+leaving the ones it does, which is what gives a batch response consequences. Batch size and the
+batching window are modelled, because what a batch is decides what a mixed-batch demonstration can
+show — one long poll for the first record, then the deployed `MaximumBatchingWindowInSeconds` to fill
+the rest, held in step with the template by `LocalStackParityTests`. Concurrency, scaling, and the
+mapping's own failure and retry behaviour are not, as in
+[The Local End-to-End Path](#the-local-end-to-end-path). Story
+[#32](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/issues/32) is where the real
+mapping is exercised, and nothing here substitutes for it.
+
+**What deliberately differs, and why.** Three things, each because matching production would
+demonstrate less rather than more.
+
+| Setting | Deployed | Local | Why |
+| --- | --- | --- | --- |
+| Visibility timeout | 210 seconds, from the formula | 30 seconds | The stand-in resets a failed record's visibility to zero, so a poison message reaches the dead-letter queue in seconds instead of five timeouts. Redelivery still happens after the same five receives. |
+| Event skew window | 24 hours ahead, 5 days behind | 24 hours ahead, 365 days behind | The events in `samples/` carry fixed timestamps because their hashes are what several suites assert on. Rejecting them for age would demonstrate the skew rule rather than the idempotency model. A year is the most `EventSkewWindow` accepts, so the fixtures have to be re-dated once they are older than that — which moves their hashes, and the vectors in `hash-vectors.json` with them. |
+| Tracing | OTLP to the ADOT collector | `OTEL_SDK_DISABLED=true` | No collector runs beside the container, and there is no X-Ray to look at. Spans are still started; nothing exports them. |
+
+What does not differ is the part a demonstration is about: the queue names, the redrive setting the
+poison-message flow is counted against, the long-poll wait, the table shapes, the handler, and the
+service and metric labels on every line the function writes. Those are copies of what the CDK
+deploys, because a program that runs in a container cannot reference `Amazon.CDK.Lib` to borrow two
+strings and an integer, and `LocalStackParityTests` synthesises the development stack and compares
+each of them against the template.
+
+**One flow reads differently on a fast replay, and it is not a defect.** Republishing the byte-identical
+duplicate within ten minutes reports `Processed` a second time rather than `Duplicate`, because
+`ClientRequestToken` is the event identifier and DynamoDB replays the original transaction's result
+inside that window without re-evaluating the conditions. After it, the conditional writes classify it
+as `Duplicate(Event)`. Both are correct and both are required cases — 5 and 6 of the concurrency
+list — and the claim that holds either way is the one that matters: no second order is written.
+
 ## Optional Quality Tests
 
 - Mutation testing for core domain and classification logic
