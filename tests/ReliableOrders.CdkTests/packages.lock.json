@@ -386,6 +386,15 @@
           "ReliableOrders.Core": "[1.0.0, )"
         }
       },
+      "reliableorders.local": {
+        "type": "Project",
+        "dependencies": {
+          "AWSSDK.DynamoDBv2": "[4.0.103.3, )",
+          "AWSSDK.SQS": "[4.0.100.9, )",
+          "ReliableOrders.Core": "[1.0.0, )",
+          "ReliableOrders.Function": "[1.0.0, )"
+        }
+      },
       "Amazon.Lambda.Core": {
         "type": "CentralTransitive",
         "requested": "[3.3.0, )",

@@ -14,6 +14,13 @@
       A test-only reference: the CDK app itself does not depend on the function it deploys.
     -->
     <ProjectReference Include="..\..\src\ReliableOrders.Function\ReliableOrders.Function.csproj" />
+    <!--
+      For the constants the local development stack copies out of the CDK — the queue names and the
+      redrive setting — which LocalStackParityTests holds in step with the synthesised template. A
+      test-only reference in the same direction as the one above: nothing deployed depends on the
+      local stack.
+    -->
+    <ProjectReference Include="..\..\local\ReliableOrders.Local\ReliableOrders.Local.csproj" />
   </ItemGroup>
 
   <!--

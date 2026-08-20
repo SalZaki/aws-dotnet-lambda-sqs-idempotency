@@ -96,11 +96,142 @@ Package versions live in [`Directory.Packages.props`](Directory.Packages.props) 
 graph is committed as a `packages.lock.json` per project. After changing a package, restore and
 commit the regenerated lock files.
 
-There is nothing to deploy yet. Once the first milestone lands this section will carry deployment, a
-demonstration of duplicate suppression and dead-letter handling, and teardown.
-
-Until then, [Architecture](docs/architecture.md) describes every component and its contract, and
+There is nothing to deploy to AWS yet. Until there is, the flows can be run locally — see below —
+and [Architecture](docs/architecture.md) describes every component and its contract while
 [Infrastructure](docs/infrastructure.md) specifies every AWS resource the CDK stack creates.
+
+## Running it locally
+
+`compose.yaml` runs the whole path on one machine: a queue, two tables, and the function itself. The
+tests need none of it — `dotnet test` starts and disposes what it needs from code — so this is for
+watching the flows rather than asserting them.
+
+**What is real, and what is not.** The function runs on `public.ecr.aws/lambda/dotnet:10`, the base
+image AWS publishes for the runtime this project deploys to, through the runtime interface emulator
+that image carries. The handler, the serializer, the invocation context and the DynamoDB transaction
+are the deployed ones. DynamoDB is the official `amazon/dynamodb-local`, because the whole
+duplicate-versus-conflict path reads `CancellationReasons` and LocalStack is not dependable there.
+SQS is LocalStack, which is trusted for the narrow set of behaviours
+[SQS Emulation](docs/testing-strategy.md#sqs-emulation) lists.
+
+The event source mapping is a stand-in, and it is the only one. It batches the way the deployed
+mapping batches; concurrency, scaling and IAM are not modelled here, nothing is measured against real
+latency, and no trace is exported.
+Story [#32](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/issues/32) is where a real
+account answers those, and nothing below substitutes for it.
+[The Local Development Stack](docs/testing-strategy.md#the-local-development-stack) is the full
+account of what differs and why.
+
+### Starting it
+
+Docker, and a LocalStack auth token in `LOCALSTACK_AUTH_TOKEN` — free for non-commercial use, and
+required since the community and pro images merged. Nothing else: the images are built from source,
+so no local publish has to be current.
+
+```bash
+export LOCALSTACK_AUTH_TOKEN=...
+docker compose up --build
+```
+
+Behind a TLS-inspecting corporate proxy, licence activation fails with exit code 55 and a message
+about a licensing server it cannot reach. Add the overlay and point it at the interceptor's root
+certificate — [SQS Emulation](docs/testing-strategy.md#sqs-emulation) has the detail, including the
+trap that makes the obvious fix look like it did nothing.
+
+```bash
+export LOCALSTACK_CA_BUNDLE=/path/to/interceptor-root.crt
+docker compose -f compose.yaml -f local/compose.ca-bundle.yaml up --build
+```
+
+The stack is ready when the mapping reports the queue it is polling. In a second terminal, take the
+two queue URLs — every command below uses them, and `cli` is the AWS CLI already pointed at both
+emulators, so nothing has to be installed to follow along.
+
+```bash
+QUEUE=$(docker compose run --rm -T cli sqs get-queue-url \
+  --queue-name reliable-orders-local --query QueueUrl --output text)
+DLQ=$(docker compose run --rm -T cli sqs get-queue-url \
+  --queue-name reliable-orders-local-dlq --query QueueUrl --output text)
+```
+
+### The flows
+
+Each one publishes an event from [`samples/`](samples/README.md) and is read in the `docker compose`
+output. `samples/README.md` says what each file is and why.
+
+**Valid.** One order is written, with its idempotency record, in one transaction.
+
+```bash
+docker compose run --rm -T cli sqs send-message --queue-url "$QUEUE" \
+  --message-body file:///repo/samples/valid-order-created-v1.json
+docker compose run --rm -T cli dynamodb scan --table-name reliable-orders-local-orders
+```
+
+**Duplicate.** The same event again, byte for byte, as an at-least-once redelivery is. Still one
+order. Within ten minutes of the first the log says `Processed` a second time rather than
+`Duplicate`, because the transaction's `ClientRequestToken` is the event identifier and DynamoDB
+replays the original result inside that window; after it, the conditional writes classify it as
+`Duplicate(Event)`. Both are correct, and the claim that holds either way is that no second order is
+written.
+
+```bash
+docker compose run --rm -T cli sqs send-message --queue-url "$QUEUE" \
+  --message-body file:///repo/samples/duplicate-order-created-v1.json
+docker compose run --rm -T cli dynamodb scan --table-name reliable-orders-local-orders --select COUNT
+```
+
+**Republish.** The same order under a new event identifier and a later time, which is what an
+upstream retry looks like. Its envelope hash differs and its business hash does not, so it is
+`Duplicate(Order)` rather than a conflict — the distinction the
+[Correctness Model](docs/correctness-model.md) exists for. Change `amountMinor` and it becomes one:
+that is the conflicting sample, and it is the only field between them.
+
+```bash
+docker compose run --rm -T cli sqs send-message --queue-url "$QUEUE" \
+  --message-body file:///repo/samples/republished-order-created-v1.json
+docker compose run --rm -T cli sqs send-message --queue-url "$QUEUE" \
+  --message-body file:///repo/samples/conflicting-order-created-v1.json
+```
+
+**Mixed batch.** One bad record in a batch must not cost the good ones their progress. Stopping the
+mapping first is what makes the batch a batch: it is whatever is on the queue when the mapping next
+polls.
+
+```bash
+docker compose stop mapping
+docker compose run --rm -T cli sqs send-message --queue-url "$QUEUE" \
+  --message-body file:///repo/samples/valid-order-created-v1.json
+docker compose run --rm -T cli sqs send-message --queue-url "$QUEUE" \
+  --message-body file:///repo/samples/invalid-order-created-v1.json
+docker compose start mapping
+```
+
+The mapping reports `Batch of 2: 1 deleted, 1 returned for redelivery`. The valid record is gone
+from the queue and the invalid one is not, which is the whole of what a partial batch response buys.
+
+If it reports two batches of one instead, nothing is wrong: SQS is entitled to return fewer messages
+than are available, and the mapping waits only the batching window the deployed one waits. Send them
+again and they will usually arrive together.
+
+**Poison message.** The invalid event has no path forward, so it is returned every time and reaches
+the dead-letter queue on its sixth delivery — five receives, matching what the deployed queue allows.
+Redelivery is immediate here rather than after a visibility timeout, so this takes seconds instead of
+the quarter of an hour a real queue spends on it.
+
+```bash
+docker compose run --rm -T cli sqs receive-message --queue-url "$DLQ" \
+  --max-number-of-messages 10 --visibility-timeout 0
+```
+
+### Stopping it
+
+```bash
+docker compose down -v
+```
+
+Both emulators are in memory, so this discards every order, every idempotency record and every queue.
+That is the point: the next run starts from nothing, and a flow cannot appear to work because of a row
+the last session left behind.
 
 ## Contributing
 

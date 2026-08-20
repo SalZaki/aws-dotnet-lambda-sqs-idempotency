@@ -3,6 +3,14 @@
   <PropertyGroup>
     <RootNamespace>ReliableOrders.Function</RootNamespace>
     <AWSProjectType>Lambda</AWSProjectType>
+    <!--
+      A class library emits no runtime configuration, and the .NET Lambda runtime will not load one
+      without it: the bootstrap refuses the package with "the /var/task directory is missing the
+      required .runtimeconfig.json file" and the invocation fails before the handler is resolved.
+      Only an executable generates the file by default, which is why AWS's own class-library template
+      carries this line. It is not a packaging nicety — it is what makes the publish output loadable.
+    -->
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     <Description>
       Lambda composition root. A class-library handler, not an executable assembly: the managed
       runtime loads the assembly and the serializer arrives by assembly-level attribute. See the

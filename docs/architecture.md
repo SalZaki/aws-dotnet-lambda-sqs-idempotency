@@ -419,6 +419,11 @@ aws-dotnet-lambda-sqs-idempotency/
 │       ├── Configuration/
 │       ├── Constructs/
 │       └── Stacks/
+├── local/
+│   ├── ReliableOrders.Local/          provisions the emulators, stands in for the event source mapping
+│   │   └── Program.cs                 two verbs: provision and run
+│   ├── Dockerfile                     builds the function and mapping images
+│   └── compose.ca-bundle.yaml         overlay for a machine behind a TLS interceptor
 ├── tests/
 │   ├── Directory.Build.props           xunit global using, shared by every test project
 │   ├── ReliableOrders.UnitTests/
@@ -481,6 +486,7 @@ aws-dotnet-lambda-sqs-idempotency/
 ├── .markdownlint-cli2.jsonc
 ├── Directory.Build.props
 ├── Directory.Packages.props
+├── compose.yaml                        the local development stack
 ├── NuGet.config
 ├── ReliableOrders.slnx
 ├── global.json

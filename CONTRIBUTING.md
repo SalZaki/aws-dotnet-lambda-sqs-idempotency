@@ -32,6 +32,11 @@ Formatting is part of the build, not a separate step, so a layout violation is a
 one with `dotnet format ReliableOrders.slnx`. Markdown is linted too, at 100 columns:
 `npx markdownlint-cli2`.
 
+Nothing in the suite reads `compose.yaml`. It is the [local development
+stack](README.md#running-it-locally), for watching the flows by hand, and a change to the emulator
+images or the queue settings there is held to the fixtures and to the CDK by tests that do run in the
+gate — so it fails the build rather than the next person's demonstration.
+
 ## What CI enforces
 
 Three checks must pass before a pull request can merge, and the branch must be up to date with
