@@ -138,16 +138,29 @@ internal sealed record LocalConfiguration
         ?? throw new InvalidOperationException($"{name} is not set. It has no default and must be configured.");
 
     /// <remarks>
+    /// <para>
     /// Parsed rather than carried as a string, so a value that is not a URL fails here naming the
     /// variable rather than inside an SDK client that reports it as a malformed service URL.
+    /// </para>
+    /// <para>
+    /// Absolute is not a strong enough test, which is the whole reason the scheme and host are
+    /// checked. <c>Uri.TryCreate</c> reads <c>sqs:4566</c> as an absolute URI with the scheme
+    /// <c>sqs</c> and the path <c>4566</c>, and on Unix it reads a bare path as a file URI. Both are
+    /// what someone copying a host and a port out of the Compose file writes, and both would be
+    /// accepted here and reach the SDK as a service URL resolving to nothing.
+    /// </para>
     /// </remarks>
     private static Uri Endpoint(Func<string, string?> read, string name)
     {
         var value = Required(read, name);
 
         return Uri.TryCreate(value, UriKind.Absolute, out var endpoint)
+            && (string.Equals(endpoint.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)
+                || string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal))
+            && !string.IsNullOrEmpty(endpoint.Host)
             ? endpoint
-            : throw new InvalidOperationException($"{name} is set to '{value}', which is not an absolute URL.");
+            : throw new InvalidOperationException(
+                $"{name} is set to '{value}', which is not an http or https URL with a host.");
     }
 
     /// <remarks>

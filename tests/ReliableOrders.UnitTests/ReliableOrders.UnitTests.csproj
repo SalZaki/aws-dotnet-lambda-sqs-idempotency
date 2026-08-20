@@ -14,6 +14,13 @@
       an integration suite that would need a deployed log group to observe the same bytes.
     -->
     <ProjectReference Include="..\..\src\ReliableOrders.Function\ReliableOrders.Function.csproj" />
+    <!--
+      The local development stack is not deployed and no test starts it, but the environment it reads
+      is parsed by code with the same failure modes as the function's own — a missing variable, a
+      value the type cannot hold — and the same obligation to name what an operator has to go and fix.
+      Covered here rather than beside the stack's parity cases, which need a synthesised template.
+    -->
+    <ProjectReference Include="..\..\local\ReliableOrders.Local\ReliableOrders.Local.csproj" />
   </ItemGroup>
 
   <!--

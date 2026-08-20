@@ -30,6 +30,8 @@
   -->
   <ItemGroup>
     <InternalsVisibleTo Include="ReliableOrders.CdkTests" />
+    <!-- For LocalConfigurationTests, which covers the environment this program refuses to start on. -->
+    <InternalsVisibleTo Include="ReliableOrders.UnitTests" />
   </ItemGroup>
 
   <ItemGroup>
