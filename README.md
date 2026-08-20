@@ -109,8 +109,12 @@ The backlog is maintained as
 epics and milestones. [Delivery](docs/delivery.md#backlog) explains how they are structured and why
 the plan is not kept in the documentation.
 
-Contribution, security reporting and code of conduct policies are not written yet. They are tracked
-by the repository foundation epic.
+| Policy | Covers |
+| --- | --- |
+| [Contributing](CONTRIBUTING.md) | How to build, test, branch and commit, and what CI enforces before a change can merge |
+| [Support](SUPPORT.md) | Where to ask, what the documents already answer, and what is unlikely to get a reply |
+| [Security](SECURITY.md) | How to report a vulnerability privately, what is in scope, and what is already automated |
+| [Code of Conduct](CODE_OF_CONDUCT.md) | The Contributor Covenant, and how to report a concern |
 
 ## Licence
 

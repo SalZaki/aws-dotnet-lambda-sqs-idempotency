@@ -1,0 +1,45 @@
+name: Epic
+description: A group of stories delivered together, tracked to completion.
+title: "[Epic N] "
+labels: ["epic"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Epics carry `epic` plus their own `epic-N` label, and are deliberately left off milestones —
+        several span more than one, and an epic closes only after its stories do.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: What this epic delivers
+      description: >
+        The capability, and the reasoning that makes it one piece of work rather than several. Where
+        a design document already argues it, link the section rather than restating it.
+      placeholder: |
+        Four test levels: unit, container integration, CDK assertion, and real AWS.
+
+        Transaction tests run against dynamodb-local, which reports cancellation reasons faithfully.
+        LocalStack does not, and a false pass there would hide the correctness mechanism this
+        project exists to demonstrate.
+    validations:
+      required: true
+
+  - type: textarea
+    id: stories
+    attributes:
+      label: Stories
+      description: >
+        Leave empty when the epic is opened and fill it as stories are created. Each story is also
+        attached as a sub-issue, which is what drives the progress bar.
+      placeholder: |
+        - [ ] #30 Story 6.1: Unit test core logic
+        - [ ] #31 Story 6.2: Complete the container integration suite
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Deliberately not in this epic
+      description: >
+        What a reader would reasonably expect here and will not find, with where it lives instead. A
+        boundary stated once is cheaper than the same question asked on three stories.

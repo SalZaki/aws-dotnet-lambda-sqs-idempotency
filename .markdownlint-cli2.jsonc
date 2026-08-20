@@ -47,6 +47,9 @@
   // infra/ReliableOrders.Cdk and ships a README this configuration would fail.
   "ignores": [
     "**/node_modules/**",
-    ".github/ISSUE_TEMPLATE/**"
+    // The issue forms and the pull request template are forms rather than documents. A template
+    // opens with the line a contributor fills in, not with a heading, which MD041 requires.
+    ".github/ISSUE_TEMPLATE/**",
+    ".github/pull_request_template.md"
   ]
 }

@@ -1,0 +1,14 @@
+# The chooser. Security deliberately routes away from issues: a vulnerability reported in public is
+# disclosed before there is a fix, so it goes through private vulnerability reporting instead.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/security/advisories/new
+    about: Report privately. Do not open a public issue for a security problem.
+  - name: Read the design documents
+    url: https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/tree/main/docs
+    about: Most questions about behaviour are answered here, where the behaviour was argued.
+  - name: Ask for help
+    url: https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/blob/main/SUPPORT.md
+    about: How to get an answer, and what is unlikely to get one.

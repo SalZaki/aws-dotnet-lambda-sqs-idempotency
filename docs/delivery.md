@@ -30,6 +30,15 @@ markdown cannot represent. Holding both means one of them is always stale.
 - Epics are issues labelled `epic`, each also carrying `epic-0` through `epic-9`.
 - Stories are issues labelled `story`, attached to their epic as a sub-issue and
   carrying the same `epic-N` label plus an area label.
+- Two optional tiers exist between and below those, and neither is used unless it
+  earns its place. A `feature` groups stories where a capability is too large for
+  one story and too small to be an epic of its own. A `sub-task` splits a slice
+  out of a story, for work that lands in its own pull request, is deferred while
+  the rest ships, or is handed to someone else. A sub-task with none of those
+  reasons is a task on its story instead, where it costs nobody a second issue to
+  read.
+- Each tier has an issue form under `.github/ISSUE_TEMPLATE/`, which is where the
+  labels and the body shape are kept rather than in this document.
 - Milestones M1 through M6 carry the delivery sequence, in the order given by
   their descriptions.
 - Epics are deliberately left off milestones. Two of them span several
