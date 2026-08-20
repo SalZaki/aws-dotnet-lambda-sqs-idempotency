@@ -25,8 +25,10 @@ The [documentation index](docs/README.md) lists all of them and suggests a readi
 - **Something is broken**, here or in the documentation: open a
   [bug report](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/issues/new/choose).
   A failing test or an event that reproduces it is worth more than a description.
-- **Something is missing**: open a feature request. Say what you were trying to do, since the answer
-  may be that it is a deliberate non-goal — several are, and they are listed in the overview.
+- **Something is missing**: open an
+  [idea or request](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/issues/new/choose).
+  Say what you were trying to do, since the answer may be that it is a deliberate non-goal — several
+  are, and they are listed in the overview.
 - **You want to change something**: read [CONTRIBUTING.md](CONTRIBUTING.md).
 - **You found a vulnerability**: do not open an issue. Follow [SECURITY.md](SECURITY.md).
 
