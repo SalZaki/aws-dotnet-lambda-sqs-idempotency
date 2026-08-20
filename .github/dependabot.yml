@@ -17,6 +17,17 @@ updates:
       timezone: Europe/London
     commit-message:
       prefix: chore(deps)
+    # xunit's next major is a migration rather than a bump, and it is tracked as its own piece of
+    # work. Version 4 drops the VSTest bridge on the .NET 10 SDK, so every test project stops running
+    # under the command CI invokes until the suite moves to Microsoft.Testing.Platform — which
+    # changes the filter, the report and the coverage flags, and therefore the workflows and the
+    # tests that assert on them. Proposed weekly it is a red pull request nobody can merge; ignored,
+    # it waits for the story that does it properly. Remove both entries with that story.
+    ignore:
+      - dependency-name: xunit.v3
+        update-types: [version-update:semver-major]
+      - dependency-name: xunit.runner.visualstudio
+        update-types: [version-update:semver-major]
     # Grouped by what a reviewer reads together. The AWS SDK and the CDK move on their own weekly
     # cadences and would otherwise account for most of the noise on their own, and the test
     # dependencies are the group whose failure mode is contained to a build that will not compile.
