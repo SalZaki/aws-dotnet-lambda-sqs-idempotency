@@ -1,0 +1,63 @@
+name: Bug report
+description: Something behaves differently from what the documents say it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A vulnerability is not a bug report. Report one privately through the Security tab instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you observed, and what you expected instead.
+      placeholder: |
+        A republished order under a new event ID was dead-lettered as a conflict. The correctness
+        model says it should classify as a duplicate.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: >
+        A failing test or a sample event is worth more than a description. If it only reproduces
+        against AWS rather than the emulators, say so — that distinction usually locates the cause.
+      placeholder: |
+        1. Publish samples/order-created.json
+        2. Publish it again with a new eventId
+        3. The second lands on the dead-letter queue
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Log lines, metrics or trace
+      description: >
+        Paste the structured log line if you have it. Redact payloads and identifiers you would not
+        publish — the outcome and reason fields are the useful part.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit or release
+      description: The commit SHA or tag you saw this on.
+      placeholder: f59847a
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where it ran
+      multiple: true
+      options:
+        - Local, unit and CDK tests only
+        - Local, container-backed integration tests
+        - Deployed to AWS
+    validations:
+      required: true

@@ -1,0 +1,46 @@
+name: Sub-task
+description: A slice of a story, split out so it can be tracked or handed over separately.
+title: "Sub-task: "
+labels: ["sub-task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most stories need none of these. Split one out when a story has grown a piece that lands in
+        its own pull request, gets deferred while the rest ships, or is picked up by someone else.
+        Attach it to the story as a sub-issue.
+
+  - type: input
+    id: parent
+    attributes:
+      label: Story
+      description: The story this is part of.
+      placeholder: "#34"
+    validations:
+      required: true
+
+  - type: textarea
+    id: work
+    attributes:
+      label: What this covers
+      description: The slice, and where its edge is — what the parent story keeps.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why-separate
+    attributes:
+      label: Why it is separate
+      description: >
+        Deferred, handed over, or landing in its own pull request. A sub-task with no reason to be
+        one is a task on the story instead, where it costs nobody a second issue to read.
+    validations:
+      required: true
+
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: What must hold before this closes.
+    validations:
+      required: true

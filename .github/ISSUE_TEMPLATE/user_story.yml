@@ -1,0 +1,65 @@
+name: User story
+description: A single deliverable unit of work, sized to one pull request.
+title: "Story N.M: "
+labels: ["story"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Stories carry `story`, the `epic-N` label of their epic, and one `area:` label. Attach the
+        story to its epic as a sub-issue after creating it, and put it on the milestone that
+        sequences it.
+
+  - type: input
+    id: parent
+    attributes:
+      label: Epic and milestone
+      description: Rendered at the top of the issue, so both are visible without opening the sidebar.
+      placeholder: "Epic: #8  |  Milestone: M4: Delivery Automation"
+    validations:
+      required: true
+
+  - type: textarea
+    id: story
+    attributes:
+      label: The story
+      description: >
+        Who needs this and what changes for them. Where the beneficiary is an operator, a publisher
+        or a contributor rather than an end user, say so — most of this backlog serves those three.
+      placeholder: >
+        As an operator, I want an alarm to name the queue and the reason, so that the runbook I open
+        matches the notification I was sent.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: >
+        The reasoning that would otherwise be rediscovered while implementing: what fails today, what
+        was tried, which document already argues it. Optional for a small story, and the most
+        valuable field on a subtle one.
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      description: The work, as a checklist. Each item should be recognisable in a diff.
+      placeholder: |
+        - [ ] Emit the alarm with the queue name in its description.
+        - [ ] Assert the description in the CDK tests.
+    validations:
+      required: true
+
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: >
+        Observable outcomes rather than activities. "A pull request cannot merge while a required
+        check is failing" is one; "add branch protection" is a task.
+      placeholder: |
+        - [ ] An operator arriving from a notification can match it to a runbook without a lookup.
+    validations:
+      required: true

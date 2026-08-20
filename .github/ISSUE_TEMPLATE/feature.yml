@@ -1,0 +1,56 @@
+name: Feature
+description: A capability under an epic, large enough to need its own stories.
+title: "Feature: "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For planned work that is bigger than a story and smaller than an epic. An idea from outside
+        the backlog belongs in **Idea or request** instead — it becomes one of these once accepted.
+
+  - type: input
+    id: epic
+    attributes:
+      label: Epic
+      description: The epic issue this belongs to.
+      placeholder: "#8"
+    validations:
+      required: true
+
+  - type: textarea
+    id: capability
+    attributes:
+      label: What this adds
+      description: The behaviour that exists afterwards and does not exist now.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it belongs here
+      description: >
+        What it buys, and what it costs. If it changes a decision recorded in `docs/`, name the
+        document — a feature that contradicts the design needs the design changed first, or an
+        architecture decision record explaining the reversal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: stories
+    attributes:
+      label: Stories
+      description: The stories that deliver it, added as they are created.
+      placeholder: |
+        - [ ] #NN Story N.M: ...
+
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: What must hold before this closes. Observable statements, not activities.
+      placeholder: |
+        - [ ] A poison message is quarantined rather than redelivered indefinitely.
+    validations:
+      required: true

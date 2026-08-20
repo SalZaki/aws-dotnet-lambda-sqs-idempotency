@@ -1,0 +1,41 @@
+name: Idea or request
+description: Something the project should do and does not. Becomes a feature or a story if accepted.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Several capabilities are deliberate non-goals, listed in docs/overview.md. If yours is one of
+        them, the useful request is an argument for changing that decision.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The problem, rather than the solution. What are you unable to accomplish today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like to happen
+      description: If you have a design in mind, describe it and what it would cost.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you have considered instead
+      description: >
+        Including whether an existing document already covers this. A pointer to the paragraph that
+        disagrees with you is a good place to start the discussion.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: I have read docs/overview.md and this is not listed as a non-goal, or I am arguing that it should not be.
+          required: true
