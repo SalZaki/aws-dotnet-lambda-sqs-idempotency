@@ -187,46 +187,157 @@ paying for a two-gigabyte pull.
 The job carries a timeout. A licence that cannot activate never satisfies either container wait
 condition, and the Testcontainers default would spend an hour reaching that conclusion.
 
+## Deployment Identity
+
+Two things decide who may deploy, and neither is sufficient alone.
+
+IAM decides which GitHub environment may assume which role. The trust policy of each role in
+`DeploymentIdentityStack` demands two claims by `StringEquals`: the audience, so a token GitHub
+minted for another service cannot be replayed here, and the subject
+`repo:<owner>/<repo>:environment:<name>`, which a job carries only when it names that environment.
+See [Deployment identity](infrastructure.md#deployment-identity) for the stack and what the roles may
+do once they are assumed.
+
+GitHub decides which ref may reach an environment, and only GitHub can. A trust policy naming an
+environment nobody restricted is a trust policy naming every branch, so the environments carry the
+other half:
+
+| Environment | Admits | Reviewer | Assumed by |
+| --- | --- | --- | --- |
+| `dev` | branch `main` | none | `deploy-dev.yml` |
+| `release` | tag `v*` | the repository owner | `release.yml` |
+
+`scripts/configure-deployment-environments.sh` creates both, writes those policies, and stores
+each role ARN as an environment secret. It is a script rather than a page of instructions because the
+policies are the control, and a control nobody can re-apply is one nobody can check. The ARN is a
+secret rather than a variable only because it carries the account ID and this repository is public;
+it is not a credential, and assuming the role still needs a token GitHub mints for a job in that
+environment.
+
+No AWS access key is stored anywhere in this repository's configuration, and none ever was. The only
+secrets it holds are a Docker Hub token and the LocalStack licence, both of which the integration
+workflow reads and neither of which reaches an AWS account. Every credential a deployment uses is
+minted for the job that uses it and expires with it.
+
+Setup, in the order it has to happen:
+
+1. Bootstrap the account, once, with credentials nobody stores:
+   `npx cdk bootstrap aws://<account>/<region>`.
+2. Deploy `ReliableOrders-DeploymentIdentity` and read the two role ARNs from its outputs.
+3. Run the script with those ARNs and the Region.
+
+### No credentials from a fork
+
+The requirement carried from #33 is that no workflow reachable from a forked pull request can assume
+the deployment role. Three things hold it, and the third is the one that matters.
+
+Neither deployment workflow triggers on `pull_request`. Both jobs name an environment, and GitHub
+does not expose an environment's secrets to a run that is not deploying to it.
+
+The third is `deploy-dev.yml`'s own condition. It is triggered by a completed run of `ci`, and `ci`
+runs on pull requests — so a fork's pull request does raise this workflow, in this repository's
+context, with this repository's secrets. That is the documented behaviour of `workflow_run` rather
+than a misconfiguration, and it is why the job requires the triggering run to have succeeded, to have
+been a push, to have been a push to `main`, and to have come from this repository. Only the last is
+outside a fork's control.
+
+A test reads both files back: no `pull_request` anywhere in either, an environment named in each
+deploying job, and that comparison present in the condition.
+
 ## Development Deployment
 
 The workflow file is `.github/workflows/deploy-dev.yml`.
 
 ### Trigger options
 
-- push to `main` after CI succeeds; or
+- a completed successful run of `ci` on a push to `main`; or
 - manual workflow dispatch.
+
+It runs after `ci` rather than beside it. A deployment that raced the gate would put an untested
+commit into the account roughly as often as the gate is slower than this workflow. What it checks out
+is `github.event.workflow_run.head_sha` — the commit the gate ran against — because a `workflow_run`
+event checks out the default branch by default, and a push that landed while `ci` was running would
+otherwise deploy a commit no gate has seen.
+
+`ci` alone, not the integration workflow. Both run on a push to `main` and `ci` is the faster, so a
+push whose container-backed tests then fail has already deployed. That follows from the same decision
+that leaves those tests off the required checks — they are slow, they are not unimportant, and a
+failure in them is looked at rather than gating. Waiting on both would mean deploying twice or
+building a join between two `workflow_run` events, which is machinery for a development environment
+that a later push replaces anyway. Stated here because "after the gate" would otherwise imply more
+than it means.
 
 ### Steps
 
 1. Obtain short-lived AWS credentials through OIDC.
 2. Publish the function with `dotnet publish src/ReliableOrders.Function -c Release`.
-3. Run `cdk synth`.
-4. Run `cdk diff`.
-5. Deploy the development stack.
-6. Execute smoke tests.
-7. Publish the stack outputs and test summary.
+3. Run `cdk diff`.
+4. Deploy `ReliableOrders-dev`, writing the stack outputs to a file.
+5. Check the outputs and summarise them.
 
-The deployed artefact is the one this job published. Deploying a build from an earlier job means
-carrying the publish output between them as an artifact, which is a decision for the workflow that
-implements this rather than a second `dotnet publish` here.
+The deployed artefact is the one this job published. Downloading what `ci` published would mean
+trusting an artifact named by a run this job did not watch, and the publish costs less than the
+download would. There is no separate `cdk synth`: the deploy synthesises, and a template that fails
+to synthesise has already failed the gate.
+
+The outputs are the deployment's own account of what it made, and a missing one means the stack
+deployed without something the runbooks and the end-to-end tests reach for by name — which
+CloudFormation reports as success. The check is `scripts/check-stack-outputs.py` rather than a step,
+because the release deployment runs the same one and a second copy of the six names would be the one
+that fell behind. A test holds that list in step with the stack's outputs, and a second reads both
+workflows for the call, so neither an output renamed in one place nor a deployment that quietly
+stopped checking passes unnoticed.
+
+Names are published to the run summary, never values. A queue URL carries the account ID, a step
+summary on a public repository is public, and the account-ID masking that covers the log does not
+cover that file. The masking is asked for explicitly — `configure-aws-credentials` does not mask by
+default.
 
 ## Release Deployment
 
-The workflow file is `.github/workflows/release.yml`.
+The workflow file is `.github/workflows/release.yml`. It deploys a signed tag, in three jobs, and
+what distinguishes it from the workflow above is what has to happen before it rather than what it
+deploys.
 
 ### Trigger
 
-- signed version tag or manual dispatch.
+- a `v*` tag, or a manual dispatch aimed at one. A dispatch aimed at a branch is refused: releases
+  are cut from tags, and a branch reaching the deployment would deploy whatever it points at under a
+  release's name.
 
-### Requirements
+### Jobs
 
-- GitHub protected environment
-- optional reviewer approval
-- restricted OIDC role
-- immutable action SHAs
-- deployment concurrency group
-- generated release notes
-- provenance or artifact attestation where useful
+1. `verify` reads the tag through the API and fails unless GitHub reports it as a verified signature.
+   A lightweight tag is refused as carrying nothing to verify. This runs before the approval, so a
+   reviewer is never asked to approve a deployment of something the repository cannot show came from
+   a key it knows. It emits the commit the tag pointed at.
+2. `deploy` runs in the `release` environment, waits for its reviewer, checks out that commit, and
+   deploys under the release role. The commit rather than the tag, because the approval gate sits
+   between the two jobs and a tag is a movable reference — resolving it again on the far side would
+   verify one commit and deploy whichever the tag named by then. It checks the stack outputs the way
+   the development deployment does.
+3. `publish` creates the release with generated notes, and does nothing if the release already
+   exists, so a re-run after a transient failure does not report red over a deployment that
+   succeeded. It is a job of its own because it is the only one here that writes to the repository,
+   and the job holding AWS credentials has no business also holding a token that can publish.
+
+Both deployment workflows share the concurrency group `deploy-reliable-orders-dev`, because they
+deploy the same stack. Neither cancels a run in flight: a cancelled deployment leaves the stack
+mid-update, which is a state an operator has to clear by hand.
+
+The group is declared on the deploying job rather than on the workflow, and that placement is
+load-bearing. A workflow-level group is entered by the run before any job's condition is read, and
+every completed run of `ci` raises `deploy-dev` — pull requests included, where the job is then
+skipped. GitHub keeps one pending run per group and cancels the run it replaces, so a no-op raised by
+an unrelated pull request could cancel a queued deployment of `main` while a release held the group.
+A skipped job never enters.
+
+`dev` is the only environment defined today, so a release deploys what a push to `main` deploys, and
+the release role and the development role differ in trust rather than in reach. That is worth stating
+plainly rather than dressing up. What the release adds is the verified tag, the reviewer, and the
+notes; what the separate role buys is that CloudTrail can tell a release apart from a push, and that
+a second account can be trusted separately the day [Story 9.4](../docs/delivery.md#backlog) defines
+one — without re-trusting anything that exists.
 
 ## Ephemeral AWS End-to-End Test
 

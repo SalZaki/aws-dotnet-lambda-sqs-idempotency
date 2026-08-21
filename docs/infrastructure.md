@@ -294,7 +294,10 @@ Use one application stack for the first release, divided into focused constructs
 - `PersistenceConstruct`
 - `OrderProcessorConstruct`
 - `ObservabilityConstruct`
-- `DeploymentIdentityConstruct` only if deployment identity is managed in the same repository
+
+Deployment identity is managed in this repository, but not in that stack. Specification v1 offered a
+`DeploymentIdentityConstruct` inside it; what is deployed is a `DeploymentIdentityStack` beside it,
+for the reason [Deployment identity](#deployment-identity) gives.
 
 Configuration should be environment-based and typed.
 
@@ -331,6 +334,49 @@ Which configuration a synthesis uses comes from the `environment` CDK context ke
 `cdk.json` and overridable with `cdk deploy -c environment=<name>`. An unknown name fails synthesis
 naming the environments that exist, rather than falling back to the development sizing — deploying
 development retention into a production account is not a failure anyone notices on the day.
+
+### Deployment identity
+
+`DeploymentIdentityStack` holds the GitHub OIDC provider and the two roles the deployment workflows
+assume. It is a stack of its own rather than a construct in the application stack, and it is deployed
+by hand:
+
+```bash
+cd infra/ReliableOrders.Cdk
+npx cdk deploy ReliableOrders-DeploymentIdentity
+```
+
+A construct inside the application stack would be deployed by the workflow that the trust policy
+admits, and a workflow that can deploy the policy admitting it can widen it. Who may deploy would
+then be answered by whoever last pushed to a branch, which is the question this stack exists to
+answer once. The cost is a manual step at setup, taken with credentials nobody stores.
+
+The app now holds two stacks, so every CLI command names the one it means. `cdk deploy` with no stack
+named refuses to guess, and the deployment workflows name `ReliableOrders-dev` for the same reason
+they hold no permission to deploy the other one.
+
+The roles grant no service permissions. Each may assume the CDK bootstrap's deploy and file-publish
+roles for this account and Region, and read the bootstrap version parameter, and that is the whole
+policy. What a deployment may create is then the bootstrap's decision — taken once for the account,
+and narrowed further by a permissions boundary where one is configured — rather than a list in this
+repository that would have to be widened for every resource a later story adds.
+
+The provider is declared as `AWS::IAM::OIDCProvider` rather than through the L2 construct, which is
+backed by a custom resource and would put a Lambda function and a role of its own into the one stack
+whose subject is who may deploy. IAM allows one provider per issuer per account and refuses a second,
+so an account that already trusts GitHub imports the one it has:
+
+```bash
+npx cdk deploy ReliableOrders-DeploymentIdentity -c githubOidcProviderArn=<arn>
+```
+
+The repository whose workflows are trusted is the `githubRepository` context key, defaulted in
+`cdk.json` so a fork can see what it is trusting and change it in one place. It is parsed rather than
+interpolated: a value carrying a wildcard is a valid IAM condition, deploys without complaint, and
+leaves a role that trusts workflows in repositories nobody has read.
+
+Which environment may assume which role is IAM's half of the decision. Which ref may reach an
+environment is GitHub's, and is in [CI/CD Design](ci-cd.md#deployment-identity).
 
 ### Rule pack
 
