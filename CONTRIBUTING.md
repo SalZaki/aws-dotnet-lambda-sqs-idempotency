@@ -26,8 +26,11 @@ dotnet test --solution ReliableOrders.slnx -c Release \
 ```
 
 The filter excludes the container-backed tests. Running the whole suite needs Docker, and the SQS
-tests additionally need a LocalStack auth token — without one they skip with a reason rather than
-fail. [SQS Emulation](docs/testing-strategy.md#sqs-emulation) covers both.
+tests additionally need a LocalStack auth token in `LOCALSTACK_AUTH_TOKEN` — without one they skip
+with a reason rather than fail, and with one that is rejected they fail rather than skip. Set it in
+the environment of whatever runs the tests, which for an IDE is not the shell profile.
+[Getting started](README.md#getting-started) has the commands, and [SQS
+Emulation](docs/testing-strategy.md#sqs-emulation) covers reading a failure.
 
 Formatting is part of the build, not a separate step, so a layout violation is a build error. Fix
 one with `dotnet format ReliableOrders.slnx`. Markdown is linted too, at 100 columns:

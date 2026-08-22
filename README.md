@@ -102,12 +102,36 @@ carry the `Integration` category and are excluded by the filter above.
 dotnet test --solution ReliableOrders.slnx -c Release
 ```
 
-The SQS tests need one thing further: LocalStack requires an auth token, free for non-commercial
+The SQS tests need one thing further. LocalStack requires an auth token, free for non-commercial
 use, in `LOCALSTACK_AUTH_TOKEN`. Without one they skip with a reason rather than fail, so the command
-above is safe to run on a machine that has never been set up for them. Behind a TLS-inspecting
-corporate proxy they need `LOCALSTACK_CA_BUNDLE` as well. Both are explained in [SQS
-Emulation](docs/testing-strategy.md#sqs-emulation), along with why DynamoDB deliberately uses a
-different emulator.
+above is safe on a machine that has never been set up for them.
+
+```bash
+export LOCALSTACK_AUTH_TOKEN=...  # from https://app.localstack.cloud
+dotnet test --solution ReliableOrders.slnx -c Release
+```
+
+Set it where the runner will read it, which is not always where it was typed. An export reaches
+`dotnet test` in that shell and nothing else, while an IDE started from the desktop inherits the
+desktop's environment — so Rider or Visual Studio on Windows reads the Windows user variables rather
+than a WSL shell profile, and the same eight tests can skip in one and fail in the other from one
+working tree. CI reads a repository secret of the same name.
+
+The container-backed suite can be run on its own, and so can the subset of it that needs the token,
+which is quicker than the whole solution when the emulators are what is being worked on.
+
+```bash
+dotnet test --project tests/ReliableOrders.IntegrationTests \
+  -- --filter-trait "Category=Integration"
+dotnet test --project tests/ReliableOrders.IntegrationTests \
+  -- --filter-trait "Category=RequiresLocalStackToken"
+```
+
+A token that is present but rejected fails those eight rather than skipping them, and the container
+exits 55 before opening its edge port. Behind a TLS-inspecting corporate proxy they need
+`LOCALSTACK_CA_BUNDLE` as well, and the failure looks much the same. [SQS
+Emulation](docs/testing-strategy.md#sqs-emulation) covers telling the two apart, both variables, and
+why DynamoDB deliberately uses a different emulator.
 
 Formatting is verified by the build rather than by a separate step, so a layout violation is a build
 error. Fix one with `dotnet format ReliableOrders.slnx`.
