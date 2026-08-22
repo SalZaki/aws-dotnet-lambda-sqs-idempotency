@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ReliableOrders.EndToEndTests</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <!--
+    Core alone. These tests are a client of a deployed stack rather than of this repository's code:
+    they send a message and read what the account did with it. What they take from Core is the wire
+    contract, the metric names and the log field names — the three things an assertion here would
+    otherwise restate, and the three that would silently stop matching when the function changed.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ReliableOrders.Core\ReliableOrders.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.SQS" />
+    <PackageReference Include="AWSSDK.DynamoDBv2" />
+    <PackageReference Include="AWSSDK.CloudWatch" />
+    <PackageReference Include="AWSSDK.CloudWatchLogs" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>

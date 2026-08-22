@@ -366,20 +366,57 @@ one — without re-trusting anything that exists.
 
 ## Ephemeral AWS End-to-End Test
 
-The workflow file is `.github/workflows/e2e.yml`.
+The workflow file is `.github/workflows/e2e.yml`. It runs nightly and on demand, and it is neither a
+gate nor a deployment: it deploys a stack of its own, drives the reliability flows through it, and
+destroys it.
+
+### Trigger
+
+Not on a pull request — it holds credentials, and a fork's pull request would either fail without
+them or be handed them. Not on a push to `main` either: a stack per merge is minutes and money for a
+signal that has not changed since the night before.
 
 ### Steps
 
-1. Generate a unique stack name.
-2. Publish the function with `dotnet publish src/ReliableOrders.Function -c Release`.
-3. Deploy an ephemeral AWS stack.
-4. Send valid, duplicate, republished, conflicting, and malformed messages.
-5. Assert DynamoDB and queue outcomes.
-6. Capture logs and metrics on failure.
-7. Destroy the stack in an `always()` cleanup step.
-8. Use resource tags and a cleanup script to remove orphaned test stacks.
+1. Obtain short-lived AWS credentials through OIDC, under a role of its own.
+2. Publish the function.
+3. Deploy `ReliableOrders-e2e-<run>`, writing the stack outputs to a file.
+4. Check the outputs, with the same script the other deployments run.
+5. Run `--filter "Category=EndToEnd"`, pointed at that file.
+6. Capture the function's log on failure, before the group is destroyed with the stack.
+7. Destroy the stack in a step that runs on `always()`.
 
-The cleanup step needs the publish output as much as the deploy does, because `cdk destroy`
-synthesises before it deletes anything. A job that lost its workspace, or one re-run from a clean
-checkout, has to publish again or pass `--app cdk.out` — otherwise the teardown fails at synthesis
-and leaves the stack it was there to remove.
+### The run reaches the environment name, not just the stack name
+
+"Generate a unique stack name" is not enough on its own. The source queue is named
+`reliable-orders-<environment>`, so a second stack deployed under the `dev` configuration collides
+with the deployed one on a queue name however its stack is called — and a run that collided would
+send test messages to the queue people are using. `EnvironmentConfig.Ephemeral` therefore produces
+the development configuration under the name `e2e-<run>`, and `ForEnvironment` matches that prefix
+explicitly rather than gaining a fallback, so an unknown name still fails synthesis.
+
+The numbers are development's deliberately. What an end-to-end run asserts is the behaviour of the
+configuration that ships, so sizing invented for the test would be a test of something nobody
+deploys. That is also why the run is slow: a poison message reaches the dead-letter queue after the
+redrive policy gives up on it, which is the receive count multiplied by the visibility timeout —
+around a quarter of an hour. The job is given an hour rather than the configuration being shortened.
+
+### A third identity
+
+The run's role is trusted for an `e2e` environment of its own, and holds what the deployment roles
+deliberately do not: sending to a run's queues, reading a run's tables, filtering its log group, and
+reading the metrics it published. Every resource pattern is anchored on the ephemeral naming, so the
+deployed environments are outside all of them — a test that went wrong cannot drain a queue anybody
+is using.
+
+Four of those patterns are wildcards, because the resources do not exist when the role is created.
+Each is accepted individually on the role with the reason it is accepted, and the accepted list is
+pinned by `NagPolicyTests` — a fifth is a deliberate edit rather than a line nobody reviews. See
+[Security Requirements](security.md).
+
+### Orphans
+
+`scripts/cleanup-ephemeral-stacks.sh` removes stacks a run never destroyed — a cancelled workflow, a
+runner that died, a token that expired mid-teardown. Deletion is by age rather than by state: a stack
+whose run is still going is younger than the window, and one older than it either finished or never
+will. It only ever considers `ReliableOrders-e2e-*`, which the deployed environments are outside of.

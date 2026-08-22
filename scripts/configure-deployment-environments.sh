@@ -7,6 +7,7 @@
 #   Apply:              ./scripts/configure-deployment-environments.sh --execute \
 #                         --dev-role-arn arn:aws:iam::<account>:role/<dev role> \
 #                         --release-role-arn arn:aws:iam::<account>:role/<release role> \
+#                         --e2e-role-arn arn:aws:iam::<account>:role/<end-to-end role> \
 #                         --region eu-west-2
 #
 # The ARNs come from the DeploymentIdentityStack outputs, which is the stack an administrator
@@ -31,6 +32,7 @@ REPO="SalZaki/aws-dotnet-lambda-sqs-idempotency"
 EXECUTE=0
 DEV_ROLE_ARN=""
 RELEASE_ROLE_ARN=""
+E2E_ROLE_ARN=""
 REGION=""
 
 # The branch deploy-dev.yml deploys from, and the tag pattern release.yml cuts a release from. Both
@@ -38,6 +40,11 @@ REGION=""
 # environment at all, and the condition is what stops a run that reached it doing anything.
 DEV_BRANCH="main"
 RELEASE_TAG="v*"
+
+# The end-to-end run is scheduled, and a scheduled workflow runs on the default branch. Same policy
+# as dev, and a role of its own — it reads a run's tables and sends to a run's queues, which the
+# deployment roles deliberately cannot.
+E2E_BRANCH="main"
 
 # A flag written last with its value forgotten would otherwise reach `shift 2` with one argument
 # left, and `set -e` turns that into an exit status and no message at all.
@@ -51,6 +58,7 @@ while [[ $# -gt 0 ]]; do
     --execute) EXECUTE=1; shift ;;
     --dev-role-arn) DEV_ROLE_ARN=$(value "$@"); shift 2 ;;
     --release-role-arn) RELEASE_ROLE_ARN=$(value "$@"); shift 2 ;;
+    --e2e-role-arn) E2E_ROLE_ARN=$(value "$@"); shift 2 ;;
     --region) REGION=$(value "$@"); shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -129,6 +137,13 @@ secret "AWS_DEPLOY_ROLE_ARN" "dev" "$DEV_ROLE_ARN"
 
 environment "release" "[{\"type\":\"User\",\"id\":$REVIEWER_ID}]" "tag" "$RELEASE_TAG"
 secret "AWS_DEPLOY_ROLE_ARN" "release" "$RELEASE_ROLE_ARN"
+
+# One secret name across three environments rather than three names in one place. The workflow asks
+# for the role its environment holds, so what changes between them is the value and not the
+# expression — and a workflow pointed at the wrong environment gets no credentials rather than
+# somebody else's.
+environment "e2e" "[]" "branch" "$E2E_BRANCH"
+secret "AWS_DEPLOY_ROLE_ARN" "e2e" "$E2E_ROLE_ARN"
 
 # A repository variable rather than a per-environment one, and that is a requirement rather than a
 # preference. Both deployment workflows read it in a job condition to decide whether this repository

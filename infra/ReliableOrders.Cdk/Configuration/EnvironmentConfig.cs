@@ -388,13 +388,112 @@ public sealed record EnvironmentConfig
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(environmentName);
 
-        return string.Equals(environmentName, Development.EnvironmentName, StringComparison.OrdinalIgnoreCase)
-            ? Development
-            : throw new ArgumentException(
+        if (string.Equals(environmentName, Development.EnvironmentName, StringComparison.OrdinalIgnoreCase))
+        {
+            return Development;
+        }
+
+        // Matched as a prefix, and only this one. The alternative to naming the family here was a
+        // fallback for anything unrecognised, which is what the exception below exists to refuse.
+        if (environmentName.StartsWith(EphemeralPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return Ephemeral(environmentName[EphemeralPrefix.Length..]);
+        }
+
+        throw new ArgumentException(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"No configuration is defined for environment '{environmentName}'. "
+                + $"Defined environments: {Development.EnvironmentName}, and {EphemeralPrefix}<run> "
+                + $"for a stack that is deployed, tested and destroyed."),
+            nameof(environmentName));
+    }
+
+    /// <summary>
+    /// The configuration for a stack that is deployed for one end-to-end run and destroyed after it.
+    /// </summary>
+    /// <param name="run">
+    /// What distinguishes this run from every other, such as a workflow run identifier.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// The run identifier is blank, too long, or holds anything but letters, digits and hyphens.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// The development numbers under another name, deliberately. What an end-to-end run asserts is the
+    /// behaviour of the configuration that ships, so sizing invented for the test would be a test of
+    /// something nobody deploys.
+    /// </para>
+    /// <para>
+    /// The run reaches the environment name rather than only the stack name because
+    /// <see cref="Constructs.MessagingConstruct"/> names the queues from it. Two stacks sharing an
+    /// environment name collide on the source queue however their stacks are called, so an ephemeral
+    /// deployment beside the development one needs a name of its own, not a stack identifier of its
+    /// own.
+    /// </para>
+    /// <para>
+    /// Retention and recovery are left as development's. Both are answers to how long the data
+    /// outlives an incident, and this stack outlives nothing — the workflow destroys it in a step that
+    /// runs whether the tests passed or not.
+    /// </para>
+    /// </remarks>
+    public static EnvironmentConfig Ephemeral(string run)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(run);
+
+        // The queue is named reliable-orders-<environment>-dlq, and SQS refuses a name over 80
+        // characters. The limit here is what leaves that true with room to spare, and it fails at
+        // synthesis rather than at the deployment that would have reported the queue name instead.
+        if (run.Length > MaximumRunLength)
+        {
+            throw new ArgumentException(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"No configuration is defined for environment '{environmentName}'. "
-                    + $"Defined environments: {Development.EnvironmentName}."),
-                nameof(environmentName));
+                    $"Run identifier '{run}' is longer than {MaximumRunLength} characters, and the "
+                    + $"queue names derived from it would be refused by SQS."),
+                nameof(run));
+        }
+
+        // A name reaches a queue name, a dashboard name and, through the stack, the IAM conditions the
+        // end-to-end role is scoped with. Anything outside this set either is refused by one of those
+        // services or widens a resource pattern, and both are worth failing on here.
+        if (!run.All(character => char.IsAsciiLetterOrDigit(character) || character == '-'))
+        {
+            throw new ArgumentException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Run identifier '{run}' holds something other than letters, digits and hyphens, "
+                    + $"which the names derived from it cannot carry."),
+                nameof(run));
+        }
+
+        return new EnvironmentConfig(
+            environmentName: $"{EphemeralPrefix}{run}",
+            lambdaRuntimeIdentifier: Development.LambdaRuntimeIdentifier,
+            lambdaMemoryMb: Development.LambdaMemoryMb,
+            lambdaTimeoutSeconds: Development.LambdaTimeoutSeconds,
+            reservedConcurrency: Development.ReservedConcurrency,
+            batchSize: Development.BatchSize,
+            batchWindowSeconds: Development.BatchWindowSeconds,
+            maxConcurrency: Development.MaxConcurrency,
+            visibilityMarginSeconds: Development.VisibilityMarginSeconds,
+            maxReceiveCount: Development.MaxReceiveCount,
+            sourceRetentionDays: Development.SourceRetentionDays,
+            dlqRetentionDays: Development.DlqRetentionDays,
+            idempotencyRetentionDays: Development.IdempotencyRetentionDays,
+            retainData: false,
+            enablePointInTimeRecovery: false,
+            alarmThresholds: Development.AlarmThresholds,
+            alarmEndpoint: Development.AlarmEndpoint);
     }
+
+    /// <summary>What every ephemeral environment's name begins with, and nothing else may.</summary>
+    /// <remarks>
+    /// Read by the end-to-end role's resource patterns and by the cleanup script that removes stacks a
+    /// destroyed run left behind, so it is a constant rather than a literal in three places.
+    /// </remarks>
+    public const string EphemeralPrefix = "e2e-";
+
+    /// <summary>The longest run identifier the derived names can carry.</summary>
+    private const int MaximumRunLength = 40;
 }

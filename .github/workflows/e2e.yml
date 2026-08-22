@@ -1,0 +1,151 @@
+name: e2e
+
+# Deploys a stack of its own, drives the reliability flows through it, and destroys it. The only
+# workflow that asserts against AWS rather than against an emulator, and the only one that creates a
+# stack nobody named in advance — see docs/testing-strategy.md for the scenarios and
+# docs/ci-cd.md for why it is neither a gate nor a deployment.
+
+on:
+  # Nightly and on demand. Not on a pull request: it holds credentials, and a fork's pull request
+  # would either fail without them or be handed them. Not on a push to main either — a stack per
+  # merge is minutes and money for a signal that has not changed since the night before.
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # One stack per run, named for the run. The queues are named from the environment rather than the
+  # stack, so the run has to reach the environment name — EnvironmentConfig.Ephemeral is where that
+  # is argued, and it is why this is not a stack-name suffix.
+  ENVIRONMENT: e2e-${{ github.run_id }}
+  STACK: ReliableOrders-e2e-${{ github.run_id }}
+
+jobs:
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+
+    # Its own environment, so the role it assumes is the one that may read a run's tables and send to
+    # a run's queues. The deployment roles hold none of that, which is the point of a third identity
+    # rather than a wider one.
+    environment: e2e
+
+    # The same question deploy-dev.yml asks, for the same reason: with nothing configured this would
+    # run to the credentials step and fail there, nightly, in this repository and in every fork.
+    if: ${{ vars.AWS_REGION != '' }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    # One run at a time. Each deploys a stack of its own so two could not collide, but they would
+    # share an account's Lambda concurrency and a bill, and a queued run costs nothing.
+    concurrency:
+      group: e2e
+      cancel-in-progress: false
+
+    # The poison-message scenario waits out the redrive policy, which is the receive count multiplied
+    # by the visibility timeout — around a quarter of an hour against the deployed configuration.
+    # Shortening it would demonstrate a stack nobody deploys, so the job is given room instead.
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/ReliableOrders.Cdk/package-lock.json
+
+      - name: Restore
+        run: dotnet restore ReliableOrders.slnx --locked-mode
+
+      - name: Build
+        run: dotnet build ReliableOrders.slnx -c Release --no-restore
+
+      - name: Publish the function
+        run: dotnet publish src/ReliableOrders.Function -c Release --no-build
+
+      - name: Install the CDK CLI
+        working-directory: infra/ReliableOrders.Cdk
+        run: npm ci
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: e2e-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      # From here on the stack may exist, so every later step has to be reachable by the teardown
+      # below. It is the first step that could leave something behind.
+      - name: Deploy the ephemeral stack
+        working-directory: infra/ReliableOrders.Cdk
+        run: >-
+          npx cdk deploy "$STACK"
+          -c environment="$ENVIRONMENT"
+          --require-approval never
+          --outputs-file "${{ runner.temp }}/outputs.json"
+
+      - name: Check the stack outputs
+        run: >-
+          python3 scripts/check-stack-outputs.py "${{ runner.temp }}/outputs.json" "$STACK"
+          >> "$GITHUB_STEP_SUMMARY"
+
+      # The suite reads the outputs file rather than being given seven variables, and asks
+      # CloudFormation for nothing — which is why its role needs no permission to describe stacks.
+      - name: Run the end-to-end scenarios
+        env:
+          E2E_OUTPUTS_FILE: ${{ runner.temp }}/outputs.json
+          E2E_STACK_NAME: ${{ env.STACK }}
+        run: >-
+          dotnet test tests/ReliableOrders.EndToEndTests -c Release --no-build
+          --filter "Category=EndToEnd"
+          --logger trx --results-directory ./test-results
+
+      # What the function said about it, on the run that failed. The stack is about to be destroyed
+      # and its log group with it, so a failure that is not captured here is a failure nobody can read
+      # afterwards.
+      - name: Capture the function's logs
+        if: ${{ failure() }}
+        run: |
+          group=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]]['OrderProcessorLogGroupName'])" \
+            "${{ runner.temp }}/outputs.json" "$STACK")
+
+          {
+            echo "## Function log"
+            echo
+            echo '```json'
+            aws logs filter-log-events --log-group-name "$group" --limit 200 \
+              --query 'events[].message' --output text || echo "No log events could be read."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-results
+          path: test-results/*.trx
+          if-no-files-found: ignore
+
+      # always(), because the stack outlives a cancelled run as readily as a failed one and costs the
+      # same. cdk destroy synthesises before it deletes, which needs the publish output this job
+      # already has — a teardown from a clean checkout would fail at synthesis and leave the stack it
+      # was there to remove.
+      - name: Destroy the ephemeral stack
+        if: ${{ always() }}
+        working-directory: infra/ReliableOrders.Cdk
+        run: npx cdk destroy "$STACK" -c environment="$ENVIRONMENT" --force

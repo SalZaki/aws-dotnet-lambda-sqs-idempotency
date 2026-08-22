@@ -44,6 +44,15 @@ public sealed class DeploymentIdentityStack : Stack
     /// </remarks>
     public const string ReleaseEnvironmentName = "release";
 
+    /// <summary>The GitHub deployment environment the end-to-end run deploys through.</summary>
+    /// <remarks>
+    /// A third environment because it is a third answer to who may deploy. The run deploys a stack of
+    /// its own, sends messages to it, reads what happened, and destroys it — so its role holds
+    /// permissions the other two deliberately do not, and an environment of its own is what keeps
+    /// those permissions off the roles that deploy the stack people rely on.
+    /// </remarks>
+    public const string EndToEndEnvironmentName = "e2e";
+
     /// <summary>
     /// The qualifier the CDK bootstrap names its roles with, when nothing overrides it.
     /// </summary>
@@ -123,6 +132,15 @@ public sealed class DeploymentIdentityStack : Stack
             ReleaseEnvironmentName,
             "Deploys a version tag, after the release environment's reviewers approve it.");
 
+        var endToEnd = DeploymentRole(
+            "EndToEndRole",
+            providerArn,
+            repository,
+            EndToEndEnvironmentName,
+            "Deploys, drives and destroys one ephemeral stack per end-to-end run.");
+
+        GrantEphemeralStackAccess(endToEnd);
+
         // The ARNs rather than the names, because that is what the workflow's secret holds and what
         // the action assumes. They are outputs rather than fixed names for the reason the tables are:
         // a name written here is a name that cannot be changed without replacing the role, and
@@ -139,6 +157,12 @@ public sealed class DeploymentIdentityStack : Stack
             Description = $"Assumed by a job running in the {ReleaseEnvironmentName} environment.",
         });
 
+        _ = new CfnOutput(this, "EndToEndRoleArn", new CfnOutputProps
+        {
+            Value = endToEnd.RoleArn,
+            Description = $"Assumed by a job running in the {EndToEndEnvironmentName} environment.",
+        });
+
         // Output whether it was declared here or imported, so the next account-level stack that needs
         // it reads one value rather than deciding which case it is in.
         _ = new CfnOutput(this, "GitHubOidcProviderArn", new CfnOutputProps
@@ -147,6 +171,120 @@ public sealed class DeploymentIdentityStack : Stack
             Description = "The provider GitHub's workflow tokens are verified against.",
         });
     }
+
+    /// <summary>
+    /// Adds what an end-to-end run needs beyond deploying: sending to its queues and reading what
+    /// happened.
+    /// </summary>
+    /// <param name="role">The role the run assumes.</param>
+    /// <remarks>
+    /// <para>
+    /// Every resource pattern is anchored on the ephemeral naming rather than left open. A run's
+    /// stack is <c>ReliableOrders-e2e-&lt;run&gt;</c> and its queues are
+    /// <c>reliable-orders-e2e-&lt;run&gt;</c>, and CloudFormation names what it generates after the
+    /// stack — so tables and the log group carry the same prefix without being named in source. The
+    /// deployed development stack is outside every one of these patterns, which is the property worth
+    /// having: a test that went wrong cannot drain the queue people are using.
+    /// </para>
+    /// <para>
+    /// The metrics read is the exception, and the only one. <c>cloudwatch:GetMetricData</c> defines no
+    /// resource — the API takes a query rather than an ARN — so there is nothing to scope it to, and
+    /// the finding that raises is accepted on this role with that reason.
+    /// </para>
+    /// </remarks>
+    private void GrantEphemeralStackAccess(Role role)
+    {
+        // The acceptances below carry the resolved ARN as a metadata key, and a key cannot hold a
+        // token. Partition resolves to a literal when the stack knows its Region and the partition
+        // literals flag is set, which cdk.json sets — and an app synthesising without it would
+        // otherwise fail inside jsii with a message about map keys rather than about the flag.
+        if (Token.IsUnresolved(Partition))
+        {
+            throw new InvalidOperationException(
+                "The partition is unresolved, so the wildcard acceptances on the end-to-end role "
+                + "cannot be written. Set @aws-cdk/core:enablePartitionLiterals in the app's context, "
+                + "as cdk.json does, and give the stack an explicit Region.");
+        }
+
+        var ephemeral = $"{EphemeralStackPrefix}*";
+        var queues = $"arn:{Partition}:sqs:{Region}:{Account}:{EphemeralQueuePrefix}*";
+        var tables = $"arn:{Partition}:dynamodb:{Region}:{Account}:table/{ephemeral}";
+        var logGroup = $"arn:{Partition}:logs:{Region}:{Account}:log-group:{ephemeral}";
+
+        // Send, because that is how a scenario starts. Receive and delete, because the dead-letter
+        // assertions read what arrived and the next scenario should not find it still there.
+        Grant(
+            role,
+            ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
+            [queues]);
+
+        // Reads only. What the function wrote is the assertion, and a test that could write the
+        // tables could make its own assertion pass.
+        Grant(role, ["dynamodb:GetItem", "dynamodb:Query"], [tables]);
+
+        Grant(
+            role,
+            ["logs:FilterLogEvents", "logs:DescribeLogStreams", "logs:GetLogEvents"],
+            [logGroup, $"{logGroup}:*"]);
+
+        Grant(role, ["cloudwatch:GetMetricData"], [AnyResource]);
+
+        // Each pattern is accepted individually, and the reason is the pattern's own. The identifiers
+        // are built from the same strings the grants were, because a finding names the resolved ARN —
+        // account and Region included — and an acceptance pasted from one account's synthesis would
+        // quietly stop matching in another.
+        Accept(
+            role,
+            queues,
+            "The queues belong to a stack that does not exist when this role is created, and they are "
+            + "named for the run that will create it. The pattern admits ephemeral queues only, so a "
+            + "run that went wrong cannot drain a queue anybody is using.");
+
+        Accept(
+            role,
+            tables,
+            "CloudFormation generates the table names, and an ephemeral stack's begin with its own "
+            + "name. Reads only, and the deployed environments' tables are outside the pattern.");
+
+        foreach (var resource in new[] { logGroup, $"{logGroup}:*" })
+        {
+            Accept(
+                role,
+                resource,
+                "The log group is generated with the stack, so it can only be named by prefix. Both "
+                + "forms are granted because a filter reads the group and its streams.");
+        }
+
+        Accept(
+            role,
+            AnyResource,
+            "cloudwatch:GetMetricData defines no resource — the API takes a query rather than an ARN "
+            + "— so there is no resource-scoped statement to write. It reads metrics and writes "
+            + "none.");
+    }
+
+    /// <summary>
+    /// Allows a set of actions on a set of resources.
+    /// </summary>
+    /// <param name="role">The role the statement is added to.</param>
+    /// <param name="actions">What it may do.</param>
+    /// <param name="resources">What it may do it to.</param>
+    private static void Grant(Role role, string[] actions, string[] resources) =>
+        role.AddToPolicy(new PolicyStatement(new PolicyStatementProps
+        {
+            Effect = Effect.ALLOW,
+            Actions = actions,
+            Resources = resources,
+        }));
+
+    /// <summary>
+    /// Accepts the wildcard finding one resource pattern raises, with the reason it is accepted.
+    /// </summary>
+    /// <param name="role">The role the finding is raised against.</param>
+    /// <param name="resource">The pattern, exactly as the statement carries it.</param>
+    /// <param name="reason">Why it is accepted, read by whoever audits this later.</param>
+    private static void Accept(Role role, string resource, string reason) =>
+        NagPolicy.Accept(role, $"AwsSolutions-IAM5[Resource::{resource}]", reason);
 
     /// <summary>
     /// Declares the OIDC provider for GitHub's token issuer.
@@ -265,6 +403,19 @@ public sealed class DeploymentIdentityStack : Stack
     /// </remarks>
     private string BootstrapRoleArn(string purpose) =>
         $"arn:{Partition}:iam::{Account}:role/cdk-{BootstrapQualifier}-{purpose}-role-{Account}-{Region}";
+
+    /// <summary>What a statement names when the action supports no resource of its own.</summary>
+    private const string AnyResource = "*";
+
+    /// <summary>What every ephemeral stack's name begins with.</summary>
+    /// <remarks>
+    /// Derived from the environment family rather than written out, so the resource patterns above
+    /// cannot drift from the names <see cref="EnvironmentConfig.Ephemeral"/> produces.
+    /// </remarks>
+    private static string EphemeralStackPrefix => $"ReliableOrders-{EnvironmentConfig.EphemeralPrefix}";
+
+    /// <summary>What every ephemeral source queue's name begins with.</summary>
+    private static string EphemeralQueuePrefix => $"reliable-orders-{EnvironmentConfig.EphemeralPrefix}";
 
     /// <summary>The qualifier this account's bootstrap was deployed with.</summary>
     /// <exception cref="InvalidOperationException">The context key is set to something else.</exception>

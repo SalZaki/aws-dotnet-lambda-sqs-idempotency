@@ -378,4 +378,73 @@ public sealed class EnvironmentConfigTests
             enablePointInTimeRecovery: enablePointInTimeRecovery,
             alarmThresholds: alarmThresholds ?? Thresholds(),
             alarmEndpoint: alarmEndpoint);
+
+    /// <summary>
+    /// An ephemeral run's name carries the run, and the configuration is development's.
+    /// </summary>
+    /// <remarks>
+    /// The numbers are development's on purpose. What an end-to-end run asserts is the behaviour of
+    /// the configuration that ships, so sizing invented for the test would be a test of something
+    /// nobody deploys.
+    /// </remarks>
+    [Fact]
+    public void An_ephemeral_environment_is_development_under_another_name()
+    {
+        var ephemeral = EnvironmentConfig.Ephemeral("32567176081");
+
+        Assert.Equal("e2e-32567176081", ephemeral.EnvironmentName);
+        Assert.Equal(EnvironmentConfig.Development.VisibilityTimeoutSeconds, ephemeral.VisibilityTimeoutSeconds);
+        Assert.Equal(EnvironmentConfig.Development.MaxReceiveCount, ephemeral.MaxReceiveCount);
+        Assert.Equal(EnvironmentConfig.Development.BatchSize, ephemeral.BatchSize);
+        Assert.False(ephemeral.RetainData);
+    }
+
+    /// <summary>
+    /// The context key routes to the family, and to nothing else.
+    /// </summary>
+    /// <remarks>
+    /// The prefix is matched rather than a fallback added, because the exception is the guard: an
+    /// unknown name failing synthesis is what stops development sizing deploying into another
+    /// account under its name.
+    /// </remarks>
+    [Theory]
+    [InlineData("dev", "dev")]
+    [InlineData("e2e-1", "e2e-1")]
+    [InlineData("E2E-1", "e2e-1")]
+    public void A_defined_environment_name_resolves(string context, string expected)
+    {
+        Assert.Equal(expected, EnvironmentConfig.ForEnvironment(context).EnvironmentName);
+    }
+
+    [Theory]
+    [InlineData("prod")]
+    [InlineData("e2e")]
+    [InlineData("staging-e2e-1")]
+    public void An_undefined_environment_name_fails(string context)
+    {
+        _ = Assert.Throws<ArgumentException>(() => EnvironmentConfig.ForEnvironment(context));
+    }
+
+    /// <summary>
+    /// A run identifier the derived names could not carry is refused at synthesis.
+    /// </summary>
+    /// <remarks>
+    /// The queue is named <c>reliable-orders-&lt;environment&gt;-dlq</c> and SQS refuses a name over
+    /// eighty characters or one holding anything but letters, digits and hyphens. Failing here names
+    /// the run identifier; failing at deployment names the queue, which is one step further from what
+    /// the reader has to change.
+    /// </remarks>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("run_1")]
+    [InlineData("run 1")]
+    [InlineData("run/1")]
+    [InlineData("run*")]
+    [InlineData("012345678901234567890123456789012345678901")]
+    public void A_run_the_names_cannot_carry_is_refused(string run)
+    {
+        _ = Assert.Throws<ArgumentException>(() => EnvironmentConfig.Ephemeral(run));
+    }
+
 }

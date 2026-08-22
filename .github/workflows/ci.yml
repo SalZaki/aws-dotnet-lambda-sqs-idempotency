@@ -68,10 +68,15 @@ jobs:
       - name: Build
         run: dotnet build ReliableOrders.slnx -c Release --no-restore
 
-      # Container-backed tests are excluded and run in integration.yml instead. They pull a large
-      # image and start a container, which is minutes against a gate that otherwise finishes in well
-      # under one. Expressed as an exclusion rather than an inclusion on purpose: a new test project
-      # nobody remembers to wire up still runs here, which is the safe direction to be wrong in.
+      # Two suites are excluded and run elsewhere: container-backed tests in integration.yml, which
+      # pull a large image and start a container, and the end-to-end tests in e2e.yml, which need a
+      # deployed stack and an account to deploy it into. Both are minutes against a gate that
+      # otherwise finishes in well under one.
+      #
+      # Still an exclusion rather than an inclusion, so a new test project nobody remembers to wire up
+      # runs here — the safe direction to be wrong in. Each excluded suite is named, which is the cost
+      # of that: a suite that reaches an account has to be named here as well as carrying its trait,
+      # or a fork's pull request runs it against credentials it can never have.
       #
       # The trx logger carries no LogFileName. One would name every project's report the same thing
       # in the same directory, and each project would overwrite the last, leaving a summary of
@@ -79,7 +84,8 @@ jobs:
       - name: Test
         id: test
         run: >
-          dotnet test ReliableOrders.slnx -c Release --no-build --filter "Category!=Integration"
+          dotnet test ReliableOrders.slnx -c Release --no-build
+          --filter "Category!=Integration&Category!=EndToEnd"
           --collect:"XPlat Code Coverage" --logger trx --results-directory ./test-results
 
       # A failed run otherwise reports which step failed and leaves the reader to open the log for

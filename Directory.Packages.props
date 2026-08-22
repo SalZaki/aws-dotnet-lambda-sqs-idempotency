@@ -7,6 +7,8 @@
 
   <!-- AWS. Permitted in ReliableOrders.Aws and ReliableOrders.Function only, never in Core. -->
   <ItemGroup>
+    <PackageVersion Include="AWSSDK.CloudWatch" Version="4.0.104" />
+    <PackageVersion Include="AWSSDK.CloudWatchLogs" Version="4.0.103.3" />
     <PackageVersion Include="AWSSDK.DynamoDBv2" Version="4.0.103.3" />
     <!--
       SQS is a test-only dependency. Nothing in src calls the SQS API: the event source mapping

@@ -75,6 +75,8 @@ public sealed class OrderProcessorConstruct : Construct
             RemovalPolicy = config.RetainData ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
         });
 
+        Logs = logs;
+
         // Declared, because the role CDK creates by default attaches the AWS managed
         // AWSLambdaBasicExecutionRole. That policy grants logs:CreateLogGroup across the account and
         // writes to any log group in it, which is more than a function with a log group of its own
@@ -178,6 +180,16 @@ public sealed class OrderProcessorConstruct : Construct
 
     /// <summary>The function the event source invokes.</summary>
     public IFunction Function { get; }
+
+    /// <summary>
+    /// Where the function writes, which nothing can find by name because CloudFormation generates it.
+    /// </summary>
+    /// <remarks>
+    /// Exposed for the stack to publish. An end-to-end run reads the structured fields back out of
+    /// this group, and the alternative — asking Lambda for the function's configuration — is a
+    /// permission granted for the length of one assertion.
+    /// </remarks>
+    public ILogGroup Logs { get; }
 
     /// <summary>
     /// The architecture the function deploys as, which the collector layer is chosen to match.

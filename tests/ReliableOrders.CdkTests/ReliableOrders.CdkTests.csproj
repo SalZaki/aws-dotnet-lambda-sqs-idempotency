@@ -24,6 +24,16 @@
   </ItemGroup>
 
   <!--
+    The end-to-end suite copies two deployment names it cannot reference — taking them from the CDK
+    project would pull Amazon.CDK.Lib and jsii into a suite whose whole job is to talk to an account.
+    Referenced here so one case can hold the copies in step with the construct, the way the local
+    stack's are.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\ReliableOrders.EndToEndTests\ReliableOrders.EndToEndTests.csproj" />
+  </ItemGroup>
+
+  <!--
     The tests synthesise with the deployed context rather than an empty one. Feature flags change what
     a construct emits, and the CLI reads them from this file while a bare App in a test does not, so
     without it the suite asserts a template no deployment produces. Copied rather than duplicated, so
