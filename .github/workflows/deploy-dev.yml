@@ -32,17 +32,35 @@ jobs:
     # names that subject exactly, so a job that dropped this line could not assume the role at all.
     environment: dev
 
-    # A pull request from a fork reaches this workflow: ci runs on every pull request, and a completed
-    # run of it raises `workflow_run` here, in this repository's context, with this repository's
-    # secrets. Every clause below is what stops that. The run has to have succeeded, to have been a
-    # push, to have been a push to the default branch, and to have come from this repository rather
-    # than a fork — and the last is the one a fork cannot satisfy however it names its branch.
+    # The first clause asks whether this repository has an account to deploy to at all. Without it a
+    # checkout with nothing configured runs to the credentials step and fails there — which is what
+    # this repository did on the first push after the deployment story merged, and what every fork of
+    # it would do on every push forever. The variable is the honest test: it is set by the setup
+    # script, and no deployment can work without it. `vars` is readable in a job condition where
+    # `secrets` is not, so the role ARN cannot be tested here and does not need to be.
+    #
+    # AWS_REGION has to stay a repository variable. `vars` in a job condition carries repository and
+    # organisation variables only — an environment's own variables are not resolved until the
+    # environment is, which is after this is read. Moved to the dev environment beside the role ARN,
+    # where it would look like it belonged, this reads as empty and the deployment stops for good
+    # while every step below still resolves it.
+    #
+    # The trade is that a variable someone deletes stops deployments silently rather than loudly. What
+    # catches that is the environment's activity log: a push to main that deployed nothing leaves no
+    # deployment recorded against `dev`.
+    #
+    # The rest is the fork guard. A pull request from a fork reaches this workflow: ci runs on every
+    # pull request, and a completed run of it raises `workflow_run` here, in this repository's
+    # context, with this repository's secrets. The run has to have succeeded, to have been a push, to
+    # have been a push to the default branch, and to have come from this repository rather than a fork
+    # — and the last is the one a fork cannot satisfy however it names its branch.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+      vars.AWS_REGION != '' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
 
     permissions:
       contents: read

@@ -259,6 +259,26 @@ is `github.event.workflow_run.head_sha` — the commit the gate ran against — 
 event checks out the default branch by default, and a push that landed while `ci` was running would
 otherwise deploy a commit no gate has seen.
 
+No deploying job starts until `AWS_REGION` is set, which is the variable the setup script writes and
+the one no deployment can work without. It stands in for "this repository has an account to deploy
+to": without the clause, a checkout with nothing configured runs as far as the credentials step and
+fails there, which is what this repository did on the first push after the deployment story merged
+and what every fork of it would do on every push. Referencing an environment also creates it, so that
+first run left a `dev` environment behind with no branch policy on it.
+
+The variable rather than the role ARN it implies, because `vars` is readable in a job condition and
+`secrets` is not. It has to stay a **repository** variable: `vars` in a job condition carries
+repository and organisation variables only, since the environment is resolved after the condition is
+read. Moved onto the `dev` environment beside the role ARN, where it looks like it belongs, it reads
+as empty there and as its value everywhere else — so both workflows would stop deploying for good
+while every step still resolved it.
+
+The cost is that a variable someone deletes stops deployments quietly rather than loudly. Three
+things carry that weight instead: the setup script says so when `--region` is absent and nothing is
+set, the environment's activity log records no deployment for a push that deployed nothing, and the
+guard is on the deploying job alone rather than the workflow — so what is skipped is visible in the
+run beside the jobs that were not.
+
 `ci` alone, not the integration workflow. Both run on a push to `main` and `ci` is the faster, so a
 push whose container-backed tests then fail has already deployed. That follows from the same decision
 that leaves those tests off the required checks — they are slow, they are not unimportant, and a
@@ -320,6 +340,11 @@ deploys.
    exists, so a re-run after a transient failure does not report red over a deployment that
    succeeded. It is a job of its own because it is the only one here that writes to the repository,
    and the job holding AWS credentials has no business also holding a token that can publish.
+
+Only the second of those asks whether there is an account. A release is a fact about this repository
+and a deployment is one about an account, so a repository with nothing configured still verifies its
+tag and still publishes its release, and the deployment is what is skipped. The publication does not
+survive a deployment that ran and failed, which is a release nobody should be reading notes for.
 
 Both deployment workflows share the concurrency group `deploy-reliable-orders-dev`, because they
 deploy the same stack. Neither cancels a run in flight: a cancelled deployment leaves the stack

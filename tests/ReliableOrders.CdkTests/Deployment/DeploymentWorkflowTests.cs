@@ -176,6 +176,67 @@ public sealed partial class DeploymentWorkflowTests
     }
 
     /// <summary>
+    /// Neither workflow starts in a repository that has no account to deploy to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The variable is set by the setup script and no deployment can work without it, so its absence
+    /// is the honest test for "not configured yet". Without the clause a fork of this repository
+    /// fails on every push to its own default branch, at the credentials step, over an account it was
+    /// never going to have — and so did this repository on the first push after the deployment story
+    /// merged.
+    /// </para>
+    /// <para>
+    /// It has to be a variable rather than the role ARN it stands in for: <c>vars</c> is readable in
+    /// a job condition and <c>secrets</c> is not.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("deploy-dev.yml", "      vars.AWS_REGION != '' &&")]
+    [InlineData("release.yml", "    if: ${{ vars.AWS_REGION != '' }}")]
+    public void A_deployment_waits_for_an_account_to_deploy_to(string file, string clause)
+    {
+        // The clause as the condition writes it, rather than the variable's name anywhere in the
+        // file. A search for the name alone would pass on `||` in place of `&&`, which is the change
+        // that reads as a fix and removes the property this case is named for.
+        Assert.Contains(clause, Workflow(file), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The release survives a deployment that had no account to run against.
+    /// </summary>
+    /// <remarks>
+    /// A release is a fact about this repository and a deployment is one about an account, so a
+    /// variable cleared while an account is rotated should cost the second and not the first. It does
+    /// not survive a deployment that ran and failed, which is a release nobody should be reading
+    /// notes for.
+    /// </remarks>
+    [Fact]
+    public void The_release_is_published_even_where_there_was_nothing_to_deploy_to()
+    {
+        var workflow = Workflow("release.yml");
+
+        Assert.Contains("needs.verify.result == 'success'", workflow, StringComparison.Ordinal);
+        Assert.Contains("needs.deploy.result != 'failure'", workflow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The tag is verified whether or not there is an account to deploy to.
+    /// </summary>
+    /// <remarks>
+    /// Whether a tag is signed is a question about this repository. Gating the verifying job on the
+    /// account gated the release with it: a cleared variable would have skipped all three jobs and
+    /// reported the run green, having verified nothing and published nothing.
+    /// </remarks>
+    [Fact]
+    public void The_tag_is_verified_without_an_account()
+    {
+        var workflow = Workflow("release.yml");
+
+        Assert.Contains("    if: startsWith(github.ref, 'refs/tags/v')", workflow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The release deploys the commit whose signature was verified, not the tag that named it.
     /// </summary>
     /// <remarks>
