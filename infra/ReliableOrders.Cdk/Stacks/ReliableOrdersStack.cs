@@ -99,6 +99,14 @@ public sealed class ReliableOrdersStack : Stack
             Description = "The function the event source invokes.",
         });
 
+        // The group is not named in source and CloudFormation generates one, so an operator reading a
+        // runbook and an end-to-end run reading log fields both need this published to find it.
+        _ = new CfnOutput(this, "OrderProcessorLogGroupName", new CfnOutputProps
+        {
+            Value = processor.Logs.LogGroupName,
+            Description = "Where the function writes its structured log lines.",
+        });
+
         // Output because the runbooks open with it, and the name carries the environment suffix rather
         // than being the same in every account.
         _ = new CfnOutput(this, "DashboardName", new CfnOutputProps

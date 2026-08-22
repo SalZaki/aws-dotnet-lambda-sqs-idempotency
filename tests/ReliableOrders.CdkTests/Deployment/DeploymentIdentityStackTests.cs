@@ -92,7 +92,14 @@ public sealed class DeploymentIdentityStackTests
     {
         var template = Template();
 
-        foreach (var (logicalId, resource) in template.FindResources("AWS::IAM::Policy"))
+        // The end-to-end role is excluded by what only it holds. It reaches a run's own stack, which
+        // is a different question with two cases of its own; what this one asserts is that the roles
+        // that deploy the stacks people rely on hold nothing besides the bootstrap grant.
+        var deploying = template.FindResources("AWS::IAM::Policy")
+            .Where(resource => !JsonSerializer.Serialize(resource.Value)
+                .Contains("sqs:SendMessage", StringComparison.Ordinal));
+
+        foreach (var (logicalId, resource) in deploying)
         {
             var document = JsonSerializer.Serialize(resource);
 
@@ -120,6 +127,66 @@ public sealed class DeploymentIdentityStackTests
                     $"Policy '{logicalId}' carries '{refused}'. The bootstrap holds what a deployment "
                     + "may do, and a permission granted here is one its boundary never sees.");
             }
+        }
+    }
+
+    /// <summary>
+    /// The end-to-end role reaches ephemeral stacks and nothing anybody is using.
+    /// </summary>
+    /// <remarks>
+    /// The patterns are the whole of the isolation. A run's stack, queues, tables and log group all
+    /// carry the ephemeral prefix, so a test that went wrong cannot drain the development queue or
+    /// read its tables — and the assertion is written as the absence of the deployed environment's
+    /// names rather than the presence of the prefix, because the prefix is what a mistake would keep
+    /// while widening the pattern around it.
+    /// </remarks>
+    [Fact]
+    public void The_end_to_end_role_reaches_only_ephemeral_stacks()
+    {
+        var policy = EndToEndPolicy();
+
+        Assert.Contains($"{EphemeralQueuePrefix}*", policy, StringComparison.Ordinal);
+        Assert.Contains($"table/{EphemeralStackPrefix}*", policy, StringComparison.Ordinal);
+        Assert.Contains($"log-group:{EphemeralStackPrefix}*", policy, StringComparison.Ordinal);
+
+        foreach (var deployed in new[]
+                 {
+                     $"reliable-orders-{EnvironmentConfig.Development.EnvironmentName}",
+                     $"table/ReliableOrders-{EnvironmentConfig.Development.EnvironmentName}",
+                     "reliable-orders-*",
+                     "table/*",
+                 })
+        {
+            Assert.DoesNotContain(deployed, policy, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// It reads what the run produced and writes only to the queue it is testing.
+    /// </summary>
+    /// <remarks>
+    /// A run asserts on what the function wrote. A role that could write the tables could make its own
+    /// assertion pass, which is the failure this holds off — the message is the only thing the test is
+    /// allowed to put into the system.
+    /// </remarks>
+    [Fact]
+    public void The_end_to_end_role_writes_nothing_it_asserts_on()
+    {
+        var policy = EndToEndPolicy();
+
+        Assert.Contains("sqs:SendMessage", policy, StringComparison.Ordinal);
+        Assert.Contains("dynamodb:GetItem", policy, StringComparison.Ordinal);
+        Assert.Contains("logs:FilterLogEvents", policy, StringComparison.Ordinal);
+        Assert.Contains("cloudwatch:GetMetricData", policy, StringComparison.Ordinal);
+
+        foreach (var refused in new[]
+                 {
+                     "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem",
+                     "dynamodb:TransactWriteItems", "sqs:PurgeQueue", "sqs:DeleteQueue",
+                     "cloudwatch:PutMetricData", "logs:PutLogEvents", "lambda:",
+                 })
+        {
+            Assert.DoesNotContain(refused, policy, StringComparison.Ordinal);
         }
     }
 
@@ -208,6 +275,7 @@ public sealed class DeploymentIdentityStackTests
     [Theory]
     [InlineData("DevelopmentDeploymentRoleArn")]
     [InlineData("ReleaseDeploymentRoleArn")]
+    [InlineData("EndToEndRoleArn")]
     [InlineData("GitHubOidcProviderArn")]
     public void The_stack_publishes_what_the_setup_needs(string outputName)
     {
@@ -231,12 +299,36 @@ public sealed class DeploymentIdentityStackTests
             ?? throw new InvalidOperationException("cdk.json sets githubRepository to null.");
     }
 
-    /// <summary>The two environments the stack declares a role for.</summary>
+    /// <summary>The environments the stack declares a role for.</summary>
     private static readonly string[] Environments =
     [
         DeploymentIdentityStack.DevelopmentEnvironmentName,
         DeploymentIdentityStack.ReleaseEnvironmentName,
+        DeploymentIdentityStack.EndToEndEnvironmentName,
     ];
+
+    /// <summary>What every ephemeral stack and queue is named for.</summary>
+    private static string EphemeralStackPrefix => $"ReliableOrders-{EnvironmentConfig.EphemeralPrefix}";
+
+    private static string EphemeralQueuePrefix => $"reliable-orders-{EnvironmentConfig.EphemeralPrefix}";
+
+    /// <summary>
+    /// The end-to-end role's policy, rendered.
+    /// </summary>
+    /// <remarks>
+    /// Found by the actions only it holds rather than by a logical ID, for the reason
+    /// <c>SynthesizedStack</c> gives. The other two roles carry the bootstrap grant and nothing else,
+    /// so the send is what distinguishes this one.
+    /// </remarks>
+    private static string EndToEndPolicy()
+    {
+        var matches = Template().FindResources("AWS::IAM::Policy")
+            .Select(resource => JsonSerializer.Serialize(resource.Value))
+            .Where(policy => policy.Contains("sqs:SendMessage", StringComparison.Ordinal))
+            .ToArray();
+
+        return Assert.Single(matches);
+    }
 
     /// <summary>The repository under test, which is the one the app is configured with.</summary>
     private static GitHubRepository Repository => GitHubRepository.Parse(ConfiguredRepository());
@@ -266,13 +358,12 @@ public sealed class DeploymentIdentityStackTests
     /// </summary>
     private static Template TemplateWithQualifier(object qualifier)
     {
-        var app = new App(new AppProps
-        {
-            Context = new Dictionary<string, object>
-            {
-                [DeploymentIdentityStack.BootstrapQualifierContextKey] = qualifier,
-            },
-        });
+        // Built on the deployed context rather than an empty one, for the reason SynthesizedStack
+        // gives: without the feature flags the CLI supplies, the partition is a token rather than a
+        // literal and the stack synthesises differently from every deployment of it.
+        var app = SynthesizedStack.NewApp();
+
+        app.Node.SetContext(DeploymentIdentityStack.BootstrapQualifierContextKey, qualifier);
 
         return Amazon.CDK.Assertions.Template.FromStack(new DeploymentIdentityStack(
             app,

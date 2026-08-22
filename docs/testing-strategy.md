@@ -290,6 +290,35 @@ is added next.
 8. Verify custom metrics appear.
 9. Verify the stack can be destroyed cleanly in an ephemeral environment.
 
+The suite is `tests/ReliableOrders.EndToEndTests`, and it is a client of a deployed stack rather than
+of this repository's code. What it takes from `ReliableOrders.Core` is the wire contract, the metric
+names and the log field names — the three things an assertion would otherwise restate and the three
+that would silently stop matching when the function changed. The deployment names it cannot reference
+without pulling `Amazon.CDK.Lib` into it are copied, and `PublishedMetricsTests` in the CDK suite
+holds the copies in step.
+
+Everything it needs comes from the file `cdk deploy --outputs-file` wrote, named by `E2E_OUTPUTS_FILE`
+with `E2E_STACK_NAME` saying which stack in it. Asking CloudFormation instead would be a permission
+granted for the length of one lookup, and the file is what `check-stack-outputs.py` already reads —
+so an output that stopped being published fails the deployment before it reaches a test.
+
+Every assertion is a poll, because each of these services becomes consistent about the answer some
+time after the function has finished, and the deadlines differ by an order of magnitude: a table read
+is seconds behind an invocation, a metric is a minute or two behind the log line that carried it, and
+a dead-lettered message is behind the whole redrive policy. The last is read from the deployed queue
+rather than computed from the configuration that built it, so a configuration change moves the
+deadline without an edit in the suite.
+
+The events are built rather than read from `samples/`. Those fixtures carry fixed instants because
+several suites assert on their hashes, and the deployed validator refuses an event more than a day
+ahead or five days behind — a run that sent them would demonstrate the skew rule rather than the
+idempotency model.
+
+Nothing in the suite creates or destroys a stack. `e2e.yml` deploys one, points the tests at it, and
+destroys it in a step that runs whether they passed or not; a fixture that deployed its own would
+leave one behind on every run it did not finish. With nothing deployed, every case skips with a
+reason rather than failing, which is what a `dotnet test` on a laptop does.
+
 ## The Local Development Stack
 
 `compose.yaml` runs the reliability flows by hand, with no AWS account. It is not part of any test

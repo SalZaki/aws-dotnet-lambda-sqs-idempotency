@@ -466,6 +466,7 @@ aws-dotnet-lambda-sqs-idempotency/
 │   └── invalid-order-created-v1.json
 ├── scripts/
 │   ├── check-stack-outputs.py
+│   ├── cleanup-ephemeral-stacks.sh
 │   ├── configure-deployment-environments.sh
 │   ├── deploy-local.sh
 │   ├── send-sample-events.sh

@@ -25,6 +25,7 @@ PUBLISHED = [
     "OrdersTableName",
     "IdempotencyRecordsTableName",
     "OrderProcessorFunctionName",
+    "OrderProcessorLogGroupName",
     "DashboardName",
 ]
 

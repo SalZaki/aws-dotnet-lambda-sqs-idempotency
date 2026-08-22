@@ -38,12 +38,32 @@ public sealed class NagPolicyTests
     ];
 
     /// <summary>
+    /// The rules the deployment identity stack accepts findings for, and the only ones.
+    /// </summary>
+    /// <remarks>
+    /// Every one is the end-to-end role reaching resources that do not exist yet: a run's stack is
+    /// named for the run, so its queues, tables and log group can only be named by prefix. Written out
+    /// with the account and Region the test environment carries, because that is how a finding names
+    /// them — an acceptance is compared against the resolved ARN rather than the pattern that built
+    /// it. The metrics read is the odd one, and it is the same exception the function's X-Ray grant
+    /// makes: the action defines no resource at all.
+    /// </remarks>
+    private static readonly string[] AcceptedIdentityRules =
+    [
+        "AwsSolutions-IAM5[Resource::*]",
+        "AwsSolutions-IAM5[Resource::arn:aws:dynamodb:eu-west-2:111122223333:table/ReliableOrders-e2e-*]",
+        "AwsSolutions-IAM5[Resource::arn:aws:logs:eu-west-2:111122223333:log-group:ReliableOrders-e2e-*:*]",
+        "AwsSolutions-IAM5[Resource::arn:aws:logs:eu-west-2:111122223333:log-group:ReliableOrders-e2e-*]",
+        "AwsSolutions-IAM5[Resource::arn:aws:sqs:eu-west-2:111122223333:reliable-orders-e2e-*]",
+    ];
+
+    /// <summary>
     /// Synthesis raises no finding that has not been accepted.
     /// </summary>
     [Fact]
     public void The_stack_synthesises_without_an_unaccepted_finding()
     {
-        var failure = Record.Exception(Synthesise);
+        var failure = Record.Exception(() => Synthesise(ApplicationStack));
 
         if (failure is null)
         {
@@ -65,18 +85,52 @@ public sealed class NagPolicyTests
     [Fact]
     public void Only_the_named_rules_are_accepted()
     {
-        var accepted = AcknowledgedRules().Order(StringComparer.Ordinal).ToArray();
+        var accepted = AcknowledgedRules(ApplicationStack).Order(StringComparer.Ordinal).ToArray();
 
         Assert.Equal<IEnumerable<string>>(AcceptedRules, accepted);
     }
 
-    private static void Synthesise() => Stack().Item1.Synth();
+    /// <summary>
+    /// The stack that decides who may deploy passes the same pack, and accepts only what is named
+    /// above.
+    /// </summary>
+    /// <remarks>
+    /// It is checked here rather than left to the synthesis in the pull-request gate for the reason
+    /// the first case gives — a failure there names a report in a temporary directory — and because
+    /// the findings it accepts are the ones worth reading twice. Four of them widen a resource, and
+    /// each widening is what lets an end-to-end run reach a stack that does not exist yet.
+    /// </remarks>
+    [Fact]
+    public void The_identity_stack_synthesises_without_an_unaccepted_finding()
+    {
+        var failure = Record.Exception(() => Synthesise(IdentityStack));
+
+        if (failure is null)
+        {
+            return;
+        }
+
+        Assert.Fail($"cdk-nag rejected the deployment identity stack: {string.Join(", ", BrokenRules(failure))}.");
+    }
+
+    /// <summary>
+    /// Every rule the identity stack accepts is one this file names.
+    /// </summary>
+    [Fact]
+    public void Only_the_named_identity_rules_are_accepted()
+    {
+        var accepted = AcknowledgedRules(IdentityStack).Order(StringComparer.Ordinal).ToArray();
+
+        Assert.Equal<IEnumerable<string>>(AcceptedIdentityRules, accepted);
+    }
+
+    private static void Synthesise(Func<(App, Stack)> stack) => stack().Item1.Synth();
 
     /// <summary>
     /// Every rule acknowledged anywhere in the stack, however deep it was declared.
     /// </summary>
-    private static IEnumerable<string> AcknowledgedRules() =>
-        Stack().Item2.Node.FindAll()
+    private static IEnumerable<string> AcknowledgedRules(Func<(App, Stack)> stack) =>
+        stack().Item2.Node.FindAll()
             .SelectMany(construct => construct.Node.Metadata)
             .Where(entry => string.Equals(
                 entry.Type,
@@ -119,9 +173,26 @@ public sealed class NagPolicyTests
     }
 
     /// <summary>
+    /// The app the policy is applied to, and the deployment identity stack inside it.
+    /// </summary>
+    private static (App, Stack) IdentityStack()
+    {
+        var app = NagPolicy.Apply(SynthesizedStack.NewApp());
+
+        var stack = new DeploymentIdentityStack(
+            app,
+            "ReliableOrders-DeploymentIdentity",
+            GitHubRepository.Parse("octocat/hello-world"),
+            existingOidcProviderArn: null,
+            new StackProps { Env = SynthesizedStack.TestEnvironment });
+
+        return (app, stack);
+    }
+
+    /// <summary>
     /// The app the policy is applied to, and the stack inside it.
     /// </summary>
-    private static (App, Stack) Stack()
+    private static (App, Stack) ApplicationStack()
     {
         var config = EnvironmentConfig.Development;
         var app = NagPolicy.Apply(SynthesizedStack.NewApp());

@@ -32,6 +32,7 @@ public sealed partial class DeploymentWorkflowTests
     [Theory]
     [InlineData("deploy-dev.yml")]
     [InlineData("release.yml")]
+    [InlineData("e2e.yml")]
     public void A_deployment_workflow_is_never_started_by_a_pull_request(string file)
     {
         Assert.DoesNotContain("pull_request", Workflow(file), StringComparison.Ordinal);
@@ -48,6 +49,7 @@ public sealed partial class DeploymentWorkflowTests
     [Theory]
     [InlineData("deploy-dev.yml", DeploymentIdentityStack.DevelopmentEnvironmentName)]
     [InlineData("release.yml", DeploymentIdentityStack.ReleaseEnvironmentName)]
+    [InlineData("e2e.yml", DeploymentIdentityStack.EndToEndEnvironmentName)]
     public void A_deploying_job_runs_in_the_environment_its_role_trusts(string file, string environmentName)
     {
         var workflow = Workflow(file);
@@ -76,6 +78,41 @@ public sealed partial class DeploymentWorkflowTests
             StringComparison.Ordinal);
 
         Assert.Contains("github.event.workflow_run.conclusion == 'success'", workflow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The end-to-end run destroys its stack whatever became of the tests.
+    /// </summary>
+    /// <remarks>
+    /// always(), not success() and not failure(). A stack outlives a cancelled run as readily as a
+    /// failed one and bills the same — two queues, two tables and a log group — and the run that
+    /// leaves one behind is exactly the run nobody goes back to read.
+    /// </remarks>
+    [Fact]
+    public void The_end_to_end_run_destroys_what_it_deployed()
+    {
+        var workflow = Workflow("e2e.yml");
+
+        Assert.Contains("if: ${{ always() }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("npx cdk destroy", workflow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The ephemeral stack is named for the run, through the environment rather than the stack alone.
+    /// </summary>
+    /// <remarks>
+    /// The queues take their names from the environment, so two runs sharing one would collide on the
+    /// source queue however their stacks were called — and a run colliding with `dev` would send test
+    /// messages to the queue people are using. <c>EnvironmentConfig.Ephemeral</c> is where that is
+    /// argued; this is what stops the workflow passing the run to only half of it.
+    /// </remarks>
+    [Fact]
+    public void The_ephemeral_stack_is_named_for_the_run()
+    {
+        var workflow = Workflow("e2e.yml");
+
+        Assert.Contains($"ENVIRONMENT: {EnvironmentConfig.EphemeralPrefix}${{{{ github.run_id }}}}", workflow, StringComparison.Ordinal);
+        Assert.Contains("-c environment=\"$ENVIRONMENT\"", workflow, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -146,6 +183,7 @@ public sealed partial class DeploymentWorkflowTests
     [Theory]
     [InlineData("deploy-dev.yml")]
     [InlineData("release.yml")]
+    [InlineData("e2e.yml")]
     public void A_deployment_checks_the_outputs_it_produced(string file)
     {
         var workflow = Workflow(file);
@@ -164,15 +202,16 @@ public sealed partial class DeploymentWorkflowTests
     /// these files would let a no-op run cancel a queued deployment of main.
     /// </remarks>
     [Theory]
-    [InlineData("deploy-dev.yml")]
-    [InlineData("release.yml")]
-    public void A_deployment_holds_its_concurrency_group_from_the_job(string file)
+    [InlineData("deploy-dev.yml", "group: deploy-reliable-orders-dev")]
+    [InlineData("release.yml", "group: deploy-reliable-orders-dev")]
+    [InlineData("e2e.yml", "group: e2e")]
+    public void A_deployment_holds_its_concurrency_group_from_the_job(string file, string group)
     {
         var workflow = Workflow(file);
 
         Assert.Contains("    concurrency:", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("\nconcurrency:", workflow, StringComparison.Ordinal);
-        Assert.Contains("group: deploy-reliable-orders-dev", workflow, StringComparison.Ordinal);
+        Assert.Contains(group, workflow, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -194,6 +233,7 @@ public sealed partial class DeploymentWorkflowTests
     [Theory]
     [InlineData("deploy-dev.yml", "      vars.AWS_REGION != '' &&")]
     [InlineData("release.yml", "    if: ${{ vars.AWS_REGION != '' }}")]
+    [InlineData("e2e.yml", "    if: ${{ vars.AWS_REGION != '' }}")]
     public void A_deployment_waits_for_an_account_to_deploy_to(string file, string clause)
     {
         // The clause as the condition writes it, rather than the variable's name anywhere in the

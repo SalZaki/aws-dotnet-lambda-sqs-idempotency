@@ -22,6 +22,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/ReliableOrders.ArchitectureTests/ReliableOrders.ArchitectureTests.csproj" />
     <Project Path="tests/ReliableOrders.CdkTests/ReliableOrders.CdkTests.csproj" />
+    <Project Path="tests/ReliableOrders.EndToEndTests/ReliableOrders.EndToEndTests.csproj" />
     <Project Path="tests/ReliableOrders.IntegrationTests/ReliableOrders.IntegrationTests.csproj" />
     <Project Path="tests/ReliableOrders.UnitTests/ReliableOrders.UnitTests.csproj" />
   </Folder>
