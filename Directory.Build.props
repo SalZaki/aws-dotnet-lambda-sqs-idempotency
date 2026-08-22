@@ -24,7 +24,7 @@
     on purpose so tests observe what the Lambda observes. Culture-sensitive parsing and comparison
     behave the same everywhere, which is what canonical hashing needs; the managed runtime also skips
     loading ICU, which helps cold start. The cost lands on Story 1.2: currency and identifier
-    validation must not lean on culture data or RegionInfo. Story 8.4 should record this as an ADR.
+    validation must not lean on culture data or RegionInfo. Recorded as ADR 0006.
   -->
   <PropertyGroup>
     <InvariantGlobalization>true</InvariantGlobalization>

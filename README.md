@@ -43,6 +43,21 @@ Start with the [documentation index](docs/README.md). The load-bearing documents
 | [Architecture](docs/architecture.md) | C4 context and container diagrams, components, repository layout |
 | [Testing Strategy](docs/testing-strategy.md) | Five test levels, and which emulator is trustworthy for what |
 
+### Architecture decisions
+
+These decisions carry the rest of the design, and each is recorded where it can be argued with rather
+than re-argued. Every record states its context, the decision, what it costs, and the alternatives it
+beat.
+
+| Record | Decides |
+| --- | --- |
+| [0001](docs/adr/0001-use-sqs-standard-queue.md) | A standard queue over FIFO, and ordering between orders as an explicit non-goal |
+| [0002](docs/adr/0002-use-dynamodb-transactions.md) | One transaction for the order and its idempotency record, and the failure window that closes |
+| [0003](docs/adr/0003-use-dotnet-10-managed-runtime.md) | The managed .NET 10 runtime over a container image, with Native AOT deferred to a benchmark |
+| [0004](docs/adr/0004-use-opentelemetry.md) | OpenTelemetry as the one tracing pipeline, with X-Ray active tracing disabled |
+| [0005](docs/adr/0005-separate-envelope-and-business-hashes.md) | Two hashes over disjoint scopes, so a republish is a duplicate and not a conflict |
+| [0006](docs/adr/0006-set-invariant-globalization.md) | Invariant globalization repository-wide, so an event hashes the same everywhere |
+
 ## What this project exercises
 
 A compact worker, but it covers a broad set of commercially relevant ground.

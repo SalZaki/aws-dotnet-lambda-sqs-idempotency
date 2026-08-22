@@ -108,7 +108,7 @@ public sealed partial class TestPlanAuditTests
         var output = $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}";
 
         var names = Directory
-            .EnumerateFiles(Path.Combine(RepositoryRoot(), "tests"), "*.cs", SearchOption.AllDirectories)
+            .EnumerateFiles(Path.Combine(Repository.Root, "tests"), "*.cs", SearchOption.AllDirectories)
             .Where(path => !path.Contains(generated, StringComparison.Ordinal))
             .Where(path => !path.Contains(output, StringComparison.Ordinal))
             .SelectMany(path => TestClassDeclaration().Matches(File.ReadAllText(path)))
@@ -119,25 +119,11 @@ public sealed partial class TestPlanAuditTests
 
     private static string ReadTestingStrategy()
     {
-        var path = Path.Combine(RepositoryRoot(), "docs", "testing-strategy.md");
+        var path = Path.Combine(Repository.Root, "docs", "testing-strategy.md");
 
         Assert.True(File.Exists(path), $"Expected the test plan at {path}.");
 
         return File.ReadAllText(path);
-    }
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "ReliableOrders.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-
-        return directory.FullName;
     }
 
     /// <summary>Matches a backtick-quoted identifier ending in Tests.</summary>
