@@ -7,4 +7,14 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!--
+    Coverage is a Testing Platform extension rather than a VSTest data collector, so it is referenced
+    by the projects that report it rather than passed as a collector name on the command line. Here
+    rather than in each project: the gate collects coverage across the whole solution, and a suite
+    that quietly stopped contributing would lower the number without failing anything.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+  </ItemGroup>
+
 </Project>

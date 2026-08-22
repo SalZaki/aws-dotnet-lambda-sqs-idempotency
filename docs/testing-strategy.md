@@ -106,8 +106,13 @@ of them.
 
 ### Coverage reporting
 
-The pull-request gate collects line and branch coverage on every run and publishes the Cobertura
-report as an artifact. No threshold is enforced. A number picked before the pipeline exists would
+The pull-request gate collects coverage on every run and publishes the Cobertura reports as an
+artifact. It summarises line coverage rather than branch coverage, and that is a limit of the reports
+rather than a preference: the Testing Platform's collector writes one report per test module, each
+carrying branch coverage as a rate per package and nothing per line. Rates cannot be unioned — two
+suites covering opposite sides of one condition would be reported as whichever rate was higher — so
+the summary counts lines, which can be, and the artifact carries the rest for anyone who wants it.
+No threshold is enforced. A number picked before the pipeline exists would
 either sit below what the suite already reaches, proving nothing, or block work unrelated to the code
 that moved it. Publishing the figure on every pull request is what lets a threshold be chosen from
 evidence, and every case above is now covered, so the evidence exists and the number can be picked

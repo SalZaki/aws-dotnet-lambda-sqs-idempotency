@@ -85,8 +85,13 @@ matter most.
 ```bash
 dotnet restore ReliableOrders.slnx
 dotnet build ReliableOrders.slnx -c Release
-dotnet test ReliableOrders.slnx -c Release --filter "Category!=Integration"
+dotnet test --solution ReliableOrders.slnx -c Release \
+  -- --filter-not-trait "Category=Integration"
 ```
+
+The end-to-end tests are not excluded there and do not need to be: with no deployed stack to point
+them at, each one skips and says why. What is excluded is the container-backed suite, which would
+otherwise fail on a machine with no Docker rather than on anything it asserts.
 
 Two more are needed for the whole suite. **Node.js**, because every CDK test synthesises through
 jsii, which runs `node` as a child process — without it those tests fail on a missing executable
@@ -94,7 +99,7 @@ rather than on anything they assert. **Docker**, for the container-backed integr
 carry the `Integration` category and are excluded by the filter above.
 
 ```bash
-dotnet test ReliableOrders.slnx -c Release
+dotnet test --solution ReliableOrders.slnx -c Release
 ```
 
 The SQS tests need one thing further: LocalStack requires an auth token, free for non-commercial

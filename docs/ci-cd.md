@@ -13,9 +13,9 @@ The workflow file is `.github/workflows/ci.yml`.
 3. Restore using locked dependencies.
 4. Verify formatting.
 5. Build in Release mode.
-6. Run every test that needs no container, as `--filter "Category!=Integration"`, collecting TRX
-   reports and coverage. The architecture and CDK assertion tests are in that run rather than in
-   steps of their own, which is what the exclusion filter buys.
+6. Run every test that needs neither a container nor an account, as `--filter-not-trait` twice,
+   collecting TRX reports and coverage. The architecture and CDK assertion tests are in that run
+   rather than in steps of their own, which is what the exclusion filter buys.
 7. Summarise the results and the coverage in the run summary.
 8. Publish the function with `dotnet publish src/ReliableOrders.Function -c Release --no-build`.
 9. Install the pinned CDK CLI and run `cdk synth`.
@@ -48,6 +48,38 @@ Step 9 also runs the cdk-nag rules, because the pack is registered on the app ra
 harness — see [Security Requirements](security.md). A finding nobody has accepted fails the
 synthesis, so it fails this gate and any deployment equally.
 
+### The test runner
+
+`dotnet test` runs on Microsoft.Testing.Platform rather than VSTest, opted in through the `test`
+section of `global.json`. xunit.v3 4 drops the VSTest bridge on the .NET 10 SDK, so this is what
+taking that major costs — and until it was taken, every test project stopped running under the
+command this workflow invokes, before a single test executed.
+
+Four things change for anyone reading or editing these workflows.
+
+- The solution is named through `--solution` rather than positionally, and a bare directory argument
+  is refused. A project is `--project`.
+- Everything after `--` belongs to the test runner rather than to the SDK.
+- Traits are filtered by `--filter-trait` and `--filter-not-trait`, each taking one `name=value`
+  pair. The VSTest expression syntax that `--filter "Category!=Integration"` used has no meaning
+  here, and two exclusions are two flags rather than one clause joined by `&`.
+- Reports and coverage are the runner's: `--report-xunit-trx` writes one TRX per module, and
+  `--coverage --coverage-output-format cobertura` replaces the `XPlat Code Coverage` collector.
+  `coverlet.collector` was a VSTest data collector and is gone; `Microsoft.Testing.Extensions.CodeCoverage`
+  is referenced from `tests/Directory.Build.props` so every suite contributes.
+
+Exit code 8 means "zero tests ran", and the gate ignores it. The end-to-end module reports it on
+every run, because that whole suite is excluded by trait — under VSTest a project matching nothing
+simply contributed nothing, where the platform treats it as a failed run. What ignoring it gives up
+is the protection against a filter that matches nothing *anywhere*, so the test summary fails a run
+whose total is zero, which is the case that protection was for.
+
+The reports are named for the run rather than for the module, so the summariser reads the assembly
+out of each TRX. A module that ran no tests carries neither, and says so rather than being labelled
+with a timestamp nobody can act on. Coverage is now several reports rather than one, read together:
+a package covered by two suites is covered by their union, and taking whichever report was found
+first would understate every package the unit tests do not reach.
+
 ### Reporting
 
 Both summaries are written to the run summary rather than left inside an artifact. A failed run
@@ -57,10 +89,6 @@ coverage number nobody reads cannot inform the threshold decision it exists to i
 The test summary counts each suite, then shows the first twenty failures with their message and
 stack trace. The reports themselves are uploaded as well, because a run with more failures than
 that is exactly the run whose detail is worth reading in full.
-
-The TRX logger is configured without a `LogFileName`. One name in one results directory is one file,
-and each test project would overwrite the last, leaving a report for whichever assembly finished
-last and no trace of the rest.
 
 Coverage is collected and published, not enforced. A threshold is a number the team has to agree,
 and one picked here would either sit below what the suite already reaches, which proves nothing, or
@@ -145,7 +173,7 @@ The workflow file is `.github/workflows/integration.yml`. It runs on pull reques
 4. Log in to Docker Hub, when this run has credentials to do it with.
 5. Pull `amazon/dynamodb-local` at its pinned digest.
 6. Pull `localstack/localstack` at its pinned digest, only when an auth token is available.
-7. Run the container-backed tests, as `--filter "Category=Integration"`.
+7. Run the container-backed tests, as `--filter-trait "Category=Integration"`.
 
 Both images are pre-pulled so that a registry failure is reported as itself rather than as a
 container that would not start, and both are pinned to a digest that `ContainerImageTests` holds in
@@ -382,7 +410,7 @@ signal that has not changed since the night before.
 2. Publish the function.
 3. Deploy `ReliableOrders-e2e-<run>`, writing the stack outputs to a file.
 4. Check the outputs, with the same script the other deployments run.
-5. Run `--filter "Category=EndToEnd"`, pointed at that file.
+5. Run `--filter-trait "Category=EndToEnd"`, pointed at that file.
 6. Capture the function's log on failure, before the group is destroyed with the stack.
 7. Destroy the stack in a step that runs on `always()`.
 

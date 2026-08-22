@@ -111,9 +111,9 @@ jobs:
           E2E_OUTPUTS_FILE: ${{ runner.temp }}/outputs.json
           E2E_STACK_NAME: ${{ env.STACK }}
         run: >-
-          dotnet test tests/ReliableOrders.EndToEndTests -c Release --no-build
-          --filter "Category=EndToEnd"
-          --logger trx --results-directory ./test-results
+          dotnet test --project tests/ReliableOrders.EndToEndTests -c Release --no-build
+          --results-directory ./test-results --report-xunit-trx
+          -- --filter-trait "Category=EndToEnd"
 
       # What the function said about it, on the run that failed. The stack is about to be destroyed
       # and its log group with it, so a failure that is not captured here is a failure nobody can read

@@ -21,7 +21,8 @@ Prerequisites and the commands are in the [README](README.md#getting-started). I
 ```bash
 dotnet restore ReliableOrders.slnx
 dotnet build ReliableOrders.slnx -c Release
-dotnet test ReliableOrders.slnx -c Release --filter "Category!=Integration"
+dotnet test --solution ReliableOrders.slnx -c Release \
+  -- --filter-not-trait "Category=Integration"
 ```
 
 The filter excludes the container-backed tests. Running the whole suite needs Docker, and the SQS
