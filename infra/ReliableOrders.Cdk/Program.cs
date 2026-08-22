@@ -27,6 +27,25 @@ _ = new ReliableOrdersStack(
         },
     });
 
+// Account-level and deployed once by hand, so it carries no environment in its name. The CLI is
+// given a stack name on every deployment for the same reason: an app holding more than one stack
+// deploys nothing without being told which, and the one that decides who may deploy is not a stack a
+// workflow should be able to name.
+_ = new DeploymentIdentityStack(
+    app,
+    "ReliableOrders-DeploymentIdentity",
+    GitHubRepository.Parse(RequiredContext(app, "githubRepository")),
+    OptionalContext(app, "githubOidcProviderArn"),
+    new StackProps
+    {
+        Description = "The roles GitHub Actions assumes to deploy, and the trust that admits them.",
+        Env = new Amazon.CDK.Environment
+        {
+            Account = Required("CDK_DEFAULT_ACCOUNT"),
+            Region = Required("CDK_DEFAULT_REGION"),
+        },
+    });
+
 app.Synth();
 
 // Matched as an object rather than cast with as. A key set to anything but a string — cdk deploy -c
@@ -43,6 +62,29 @@ static string EnvironmentName(App app)
         _ => throw new InvalidOperationException(
             $"The environment context key is set to '{value}', which is not a name. "
             + "Pass it as -c environment=<name>."),
+    };
+}
+
+// Context is read the way the environment name above is, and fails the same way. A key set to
+// anything but a string is a key somebody meant to set — cdk deploy -c githubRepository, with no
+// value, sets it to true — and coalescing that to the default would synthesise a trust policy naming
+// a repository nobody asked for.
+static string RequiredContext(App app, string key) =>
+    OptionalContext(app, key)
+    ?? throw new InvalidOperationException(
+        $"No {key} is set. Add it to cdk.json, or pass -c {key}=<value>.");
+
+static string? OptionalContext(App app, string key)
+{
+    var value = app.Node.TryGetContext(key);
+
+    return value switch
+    {
+        null => null,
+        string text when !string.IsNullOrWhiteSpace(text) => text,
+        _ => throw new InvalidOperationException(
+            $"The {key} context key is set to '{value}', which is not a value. "
+            + $"Pass it as -c {key}=<value>."),
     };
 }
 

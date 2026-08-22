@@ -1,0 +1,184 @@
+name: release
+
+# A tagged deployment, which differs from deploy-dev in what has to happen before it rather than in
+# what it deploys. The tag is verified, a reviewer approves the release environment, and only then
+# does a job hold credentials — and they are a role of their own, so the account can tell a release
+# apart from a push in CloudTrail and a second account can be trusted separately when one exists.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Today's only defined environment, so a release deploys what a push to main deploys. What the
+  # release adds is the approval, the verified tag, and the notes. When a second environment is
+  # configured — Story 9.4 — this is the line that changes, and the role below is already separate
+  # so nothing has to be re-trusted on the day.
+  STACK: ReliableOrders-dev
+
+jobs:
+  # Before the approval rather than after it, so a reviewer is never asked to approve a deployment
+  # of something this repository cannot show came from a key it knows.
+  verify:
+    name: Verify the tag
+    runs-on: ubuntu-latest
+
+    # A dispatch can be aimed at a branch. Releases are cut from tags, and a branch reaching the
+    # deployment below would deploy whatever that branch points at under a release's name.
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    # What was verified, so the deployment can check out that commit rather than the tag's name. The
+    # approval gate sits between the two jobs, and a tag is a movable reference — resolving it a
+    # second time on the far side would report on one commit and deploy whichever the tag named by
+    # then.
+    outputs:
+      commit: ${{ steps.tag.outputs.commit }}
+
+    steps:
+      # An annotated tag carries the signature; a lightweight tag is a pointer and carries nothing to
+      # verify. GitHub reports the verification it performed against the keys the signer registered,
+      # which is the same check the default branch's ruleset makes of every commit.
+      - name: Check the tag is signed
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          reference=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha + " " + .object.type')
+          read -r sha type <<< "$reference"
+
+          if [ "$type" != "tag" ]; then
+            echo "::error::$TAG is a lightweight tag, which carries no signature. Cut releases with git tag -s."
+            exit 1
+          fi
+
+          # Read once and picked apart here. Three requests for one object would be three chances to
+          # answer differently about the tag this job is deciding on.
+          tag=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha")
+
+          if [ "$(jq -r '.verification.verified' <<< "$tag")" != "true" ]; then
+            echo "::error::$TAG is not verified ($(jq -r '.verification.reason' <<< "$tag")). GitHub has to hold the public key the tag was signed with."
+            exit 1
+          fi
+
+          # The commit the tag points at, which is what the deployment checks out rather than the
+          # name that pointed at it.
+          commit=$(jq -r '.object.sha' <<< "$tag")
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+          echo "$TAG is signed and verified, at $commit."
+
+  deploy:
+    name: Deploy the release
+    runs-on: ubuntu-latest
+    needs: verify
+
+    # Carries the reviewers and the tag policy, and puts `environment:release` in the token's
+    # subject. The release role trusts that subject and nothing else, so this line is what the trust
+    # policy is written against rather than a label on the run.
+    environment: release
+
+    permissions:
+      contents: read
+      id-token: write
+
+    # On the job, not the workflow, for the reason deploy-dev.yml gives: a workflow-level group is
+    # entered by runs whose jobs never execute. Shared with that workflow, because both deploy the
+    # same stack and the point of the group is that they cannot do it at once.
+    concurrency:
+      group: deploy-reliable-orders-dev
+      cancel-in-progress: false
+
+    steps:
+      # The verified commit rather than the tag. See the outputs of the job above.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify.outputs.commit }}
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/ReliableOrders.Cdk/package-lock.json
+
+      - name: Restore
+        run: dotnet restore ReliableOrders.slnx --locked-mode
+
+      - name: Publish the function
+        run: dotnet publish src/ReliableOrders.Function -c Release --no-restore
+
+      - name: Install the CDK CLI
+        working-directory: infra/ReliableOrders.Cdk
+        run: npm ci
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: release-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      - name: Diff against the deployed stack
+        working-directory: infra/ReliableOrders.Cdk
+        run: npx cdk diff "$STACK"
+
+      - name: Deploy
+        working-directory: infra/ReliableOrders.Cdk
+        run: >-
+          npx cdk deploy "$STACK"
+          --require-approval never
+          --outputs-file "${{ runner.temp }}/outputs.json"
+
+      # The same check the development deployment runs, on the path that carries an approval. A
+      # stack that deployed without an output is the failure CloudFormation reports as success, and
+      # it is no less true of a release.
+      - name: Check the stack outputs
+        run: >-
+          python3 scripts/check-stack-outputs.py "${{ runner.temp }}/outputs.json" "$STACK"
+          >> "$GITHUB_STEP_SUMMARY"
+
+  # A release is published for a deployment that happened, so this runs after it rather than beside
+  # it. Its own job because it is the only thing here that writes to the repository, and the job that
+  # held AWS credentials has no business also holding a token that can publish.
+  publish:
+    name: Publish the release
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    permissions:
+      contents: write
+
+    steps:
+      # No checkout. The release is created through the API from the tag, and a working tree here
+      # would only be somewhere for a later step to read something from.
+      #
+      # Notes are generated from what merged since the last release rather than written here. The
+      # merged pull request titles are the record, and a hand-written summary in a workflow is a
+      # second record that disagrees with the first.
+      #
+      # Re-runnable, because the deployment before it is. A release that already exists is the state
+      # this step wanted, and failing on it would leave a red run over a deployment that succeeded.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$TAG is already released."
+            exit 0
+          fi
+
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes

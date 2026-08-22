@@ -265,6 +265,15 @@ is added next.
 - Point-in-time recovery and removal policy vary correctly by environment.
 - Required dashboard widgets and alarms exist.
 - Resource tags exist.
+- Each deployment role trusts one repository in one GitHub environment, compared by `StringEquals`,
+  and no trust policy is written as a pattern.
+- A deployment role may assume the CDK bootstrap's deploy and file-publish roles and read the
+  bootstrap version, and holds no service permission of its own.
+- An OIDC provider the account already holds is imported rather than declared a second time.
+- Neither deployment workflow can be started by a pull request, each deploying job names the
+  environment its role trusts, and the development deployment refuses a run from a fork.
+- Every action every workflow uses is pinned to a commit rather than a tag.
+- The stack outputs the deployment checks for are the outputs the stack publishes.
 
 ## Real AWS End-to-End Tests
 

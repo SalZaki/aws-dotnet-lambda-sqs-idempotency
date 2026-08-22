@@ -1,0 +1,134 @@
+name: deploy-dev
+
+# Deploys the development stack from a commit that has already passed the gate. It is the first
+# workflow in this repository to hold AWS credentials at all — see docs/ci-cd.md for the trust that
+# admits it, and infra/ReliableOrders.Cdk/Stacks/DeploymentIdentityStack.cs for the role it assumes.
+
+on:
+  # After ci, rather than beside it. A deployment that raced the gate would put an untested commit
+  # into the account roughly as often as the gate is slower than this workflow.
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+  workflow_dispatch:
+
+# Nothing here writes to the repository. id-token is granted on the job rather than here, so a step
+# added to this file outside that job cannot mint a token for the deployment role.
+permissions:
+  contents: read
+
+env:
+  # One place, because the commands below have to name the same stack and a mismatch would diff one
+  # and deploy the other.
+  STACK: ReliableOrders-dev
+
+jobs:
+  deploy:
+    name: Deploy dev
+    runs-on: ubuntu-latest
+
+    # The environment is load-bearing rather than decorative. It carries the branch policy, it holds
+    # the role ARN, and it is what puts `environment:dev` in the token's subject — the trust policy
+    # names that subject exactly, so a job that dropped this line could not assume the role at all.
+    environment: dev
+
+    # A pull request from a fork reaches this workflow: ci runs on every pull request, and a completed
+    # run of it raises `workflow_run` here, in this repository's context, with this repository's
+    # secrets. Every clause below is what stops that. The run has to have succeeded, to have been a
+    # push, to have been a push to the default branch, and to have come from this repository rather
+    # than a fork — and the last is the one a fork cannot satisfy however it names its branch.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+
+    permissions:
+      contents: read
+
+      # Only here, and only for the token the action exchanges for credentials.
+      id-token: write
+
+    # On the job rather than the workflow, and that is the whole point. Every completed run of ci
+    # raises this workflow, including every pull request's, whose job the condition above then skips
+    # — and a workflow-level group is entered by the run before the condition is read. GitHub keeps
+    # one pending run per group and cancels the one it replaces, so a no-op run raised by an
+    # unrelated pull request could cancel a queued deployment of main while a release held the group.
+    #
+    # Shared with release.yml, which deploys the same stack. Two deployments of one stack at once is
+    # a CloudFormation error at best and a half-applied change set at worst, where a queued
+    # deployment is what should happen instead. Never cancelled in flight: a cancelled deployment
+    # leaves the stack mid-update, which is a state an operator has to clear by hand.
+    concurrency:
+      group: deploy-reliable-orders-dev
+      cancel-in-progress: false
+
+    steps:
+      # The commit ci ran against, not whatever main points at now. A workflow_run event checks out
+      # the default branch unless it is told otherwise, so a push that landed while ci was running
+      # would deploy a commit no gate has seen.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/ReliableOrders.Cdk/package-lock.json
+
+      - name: Restore
+        run: dotnet restore ReliableOrders.slnx --locked-mode
+
+      # This job publishes rather than downloading what ci published. Carrying the output between
+      # workflows means trusting an artifact named by a run this one did not watch, and the publish
+      # costs less than the download would.
+      - name: Publish the function
+        run: dotnet publish src/ReliableOrders.Function -c Release --no-restore
+
+      - name: Install the CDK CLI
+        working-directory: infra/ReliableOrders.Cdk
+        run: npm ci
+
+      # The credentials are minted for this job and expire with it. mask-aws-account-id is set
+      # because the action does not mask by default and this repository's logs are public: the CLI
+      # prints queue URLs and role ARNs, and both carry the account ID.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: deploy-dev-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      # Recorded before the change is applied, so a deployment that went wrong can be read against
+      # what it said it would do. It gates nothing: a diff is expected on every deployment that
+      # carries a change, which is every deployment worth running.
+      - name: Diff against the deployed stack
+        working-directory: infra/ReliableOrders.Cdk
+        run: npx cdk diff "$STACK"
+
+      # Named explicitly. The app also holds the stack that decides who may deploy, and this role
+      # cannot deploy that one — but a command that could name it is a command that would try.
+      - name: Deploy
+        working-directory: infra/ReliableOrders.Cdk
+        run: >-
+          npx cdk deploy "$STACK"
+          --require-approval never
+          --outputs-file "${{ runner.temp }}/outputs.json"
+
+      # The check and the six names it reads are in the script, because release.yml runs the same
+      # one. See scripts/check-stack-outputs.py for what a missing output means and why only names
+      # reach the summary.
+      - name: Check the stack outputs
+        run: >-
+          python3 scripts/check-stack-outputs.py "${{ runner.temp }}/outputs.json" "$STACK"
+          >> "$GITHUB_STEP_SUMMARY"
