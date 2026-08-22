@@ -29,6 +29,11 @@ jobs:
 
     # A dispatch can be aimed at a branch. Releases are cut from tags, and a branch reaching the
     # deployment below would deploy whatever that branch points at under a release's name.
+    #
+    # Nothing about an AWS account is asked here. Whether a tag is signed is a question about this
+    # repository, and a repository with no account to deploy to still wants the answer — see the
+    # deployment below for where the account is asked about, and why it is asked there rather than
+    # once at the top.
     if: startsWith(github.ref, 'refs/tags/v')
 
     # What was verified, so the deployment can check out that commit rather than the tag's name. The
@@ -77,6 +82,15 @@ jobs:
     name: Deploy the release
     runs-on: ubuntu-latest
     needs: verify
+
+    # Only the deployment asks whether there is an account, because only the deployment needs one.
+    # The clause on the verifying job it replaces gated the release itself: a variable cleared while
+    # rotating an account would have skipped all three jobs, reported the run green, verified no tag
+    # and published no release — and nobody watches an environment for a deployment that never
+    # started. AWS_REGION has to be a repository variable rather than an environment one: `vars` in a
+    # job condition holds repository and organisation variables only, since the environment is
+    # resolved after the condition is read.
+    if: ${{ vars.AWS_REGION != '' }}
 
     # Carries the reviewers and the tag policy, and puts `environment:release` in the token's
     # subject. The release role trusts that subject and nothing else, so this line is what the trust
@@ -153,10 +167,16 @@ jobs:
   # A release is published for a deployment that happened, so this runs after it rather than beside
   # it. Its own job because it is the only thing here that writes to the repository, and the job that
   # held AWS credentials has no business also holding a token that can publish.
+  # The release is a fact about this repository, so it survives a deployment that could not run for
+  # want of an account — and does not survive one that ran and failed, which is a release nobody
+  # should be reading notes for. !cancelled() rather than always(), for the reason ci.yml gives.
   publish:
     name: Publish the release
     runs-on: ubuntu-latest
-    needs: deploy
+    needs: [verify, deploy]
+    if: >-
+      ${{ !cancelled() && needs.verify.result == 'success'
+      && needs.deploy.result != 'failure' }}
 
     permissions:
       contents: write

@@ -130,11 +130,21 @@ secret "AWS_DEPLOY_ROLE_ARN" "dev" "$DEV_ROLE_ARN"
 environment "release" "[{\"type\":\"User\",\"id\":$REVIEWER_ID}]" "tag" "$RELEASE_TAG"
 secret "AWS_DEPLOY_ROLE_ARN" "release" "$RELEASE_ROLE_ARN"
 
-# A repository variable rather than a per-environment one: both deployments go to the same Region,
-# and it is neither a secret nor something an environment should be able to disagree about.
+# A repository variable rather than a per-environment one, and that is a requirement rather than a
+# preference. Both deployment workflows read it in a job condition to decide whether this repository
+# has an account at all, and `vars` there carries repository and organisation variables only — an
+# environment's own are not resolved until the environment is. On the environments it would read as
+# empty and both workflows would stop deploying, quietly, while every step still resolved it.
+echo "AWS_REGION"
+
 if [[ -n "$REGION" ]]; then
-  echo "AWS_REGION"
   run gh variable set AWS_REGION --repo "$REPO" --body "$REGION"
+elif [[ -z "$(gh variable list --repo "$REPO" --json name --jq '.[] | select(.name == "AWS_REGION") | .name')" ]]; then
+  # Louder than the missing ARNs above, because this one fails open. Without it both workflows skip
+  # their deploying job, and a push to main reports a green run that deployed nothing.
+  echo "  --region not given and AWS_REGION is not set, so no deployment will run at all."
+else
+  echo "  --region not given, so AWS_REGION keeps the value it holds."
 fi
 
 echo
