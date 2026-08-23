@@ -78,15 +78,28 @@ jobs:
       # of that: a suite that reaches an account has to be named here as well as carrying its trait,
       # or a fork's pull request runs it against credentials it can never have.
       #
-      # The trx logger carries no LogFileName. One would name every project's report the same thing
-      # in the same directory, and each project would overwrite the last, leaving a summary of
-      # whichever assembly happened to finish last and no trace of the rest.
+      # The solution is named through --solution rather than positionally, and everything after `--`
+      # is the test runner's rather than the SDK's. Traits are filtered by the platform's own flags:
+      # the VSTest expression syntax the old --filter took has no meaning here.
+      #
+      # Exit code 8 is "zero tests ran", which the end-to-end module reports on every run of this
+      # gate — its whole suite is excluded above. Ignoring it costs the protection against a filter
+      # that matches nothing anywhere, so the summariser below fails on a run that executed no tests
+      # at all, which is the case that protection was for.
+      #
+      # Each project writes its own TRX under the results directory, named for the run rather than
+      # for the assembly. The summariser reads the assembly out of the report, so the names do not
+      # matter, and one file per project is what it needs.
       - name: Test
         id: test
         run: >
-          dotnet test ReliableOrders.slnx -c Release --no-build
-          --filter "Category!=Integration&Category!=EndToEnd"
-          --collect:"XPlat Code Coverage" --logger trx --results-directory ./test-results
+          dotnet test --solution ReliableOrders.slnx -c Release --no-build
+          --results-directory ./test-results --report-xunit-trx
+          --coverage --coverage-output-format cobertura
+          --
+          --filter-not-trait "Category=Integration"
+          --filter-not-trait "Category=EndToEnd"
+          --ignore-exit-code 8
 
       # A failed run otherwise reports which step failed and leaves the reader to open the log for
       # which test. Conditioned on the tests having run, not on always(): after a compile failure
@@ -111,11 +124,12 @@ jobs:
               counters = root.find("t:ResultSummary/t:Counters", ns)
               counts = [int(counters.get(name)) for name in ("total", "passed", "failed", "notExecuted")]
               totals = [running + count for running, count in zip(totals, counts)]
-              # The file name is a timestamp, so the suite is read off the assembly under test. A run
-              # that defined no tests has none, and names itself after the report rather than crashing.
+              # The suite is read off the assembly under test, because the file name is the run's
+              # rather than the module's. A report that defined no tests carries neither, so it says
+              # so — naming it after a timestamped file would tell the reader nothing they can act on.
               assembly = root.find("t:TestDefinitions/t:UnitTest/t:TestMethod", ns)
               rows.append((os.path.basename(assembly.get("codeBase")) if assembly is not None
-                           else os.path.basename(report), counts))
+                           else "a module that ran no tests", counts))
               for result in root.findall("t:Results/t:UnitTestResult", ns):
                   if result.get("outcome") not in ("Passed", "NotExecuted"):
                       error = result.find("t:Output/t:ErrorInfo", ns)
@@ -123,6 +137,21 @@ jobs:
                           element.text.strip() for element in (error if error is not None else [])
                           if element.text)
                       failures.append((result.get("testName"), result.get("outcome"), detail))
+          # The gate ignores the platform's "zero tests ran" exit code, which it applies to every
+          # module rather than to the one that earns it. Exactly one module may be empty here: the
+          # end-to-end suite, excluded by trait above. A second empty module means a filter is
+          # selecting nothing it was meant to select — a trait misspelled, or added to a class that
+          # should have stayed in this gate — and that is the failure the ignored exit code would
+          # otherwise hide behind a green tick.
+          # Counted rather than named, because a report with no tests carries no assembly to name it
+          # by. The count is the actionable part: one is the end-to-end suite, and anything else is a
+          # filter to look at.
+          empty = sum(1 for _, counts in rows if counts[0] == 0)
+          if empty != 1:
+              print("%d modules ran no tests, and exactly one should: the end-to-end suite this gate "
+                    "excludes by trait. Check the trait filters in this workflow against the traits "
+                    "the suites carry." % empty, file=sys.stderr)
+              raise SystemExit(1)
           print("## Tests\n")
           print("| Suite | Total | Passed | Failed | Skipped |")
           print("| --- | --- | --- | --- | --- |")
@@ -147,26 +176,46 @@ jobs:
       # Written to the run summary rather than left inside the artifact. A number nobody reads cannot
       # inform the threshold decision it exists to inform, and reading it otherwise means downloading a
       # zip and opening Cobertura XML.
+      # One report per test module now, each named for the run rather than for the project, where the
+      # collector wrote a single coverage.cobertura.xml. They are read together: a package covered by
+      # two suites is covered by their union, and reporting whichever report was found first would
+      # understate every package the unit tests do not reach.
       - name: Summarise coverage
         if: ${{ !cancelled() && (steps.test.outcome == 'success' || steps.test.outcome == 'failure') }}
         shell: bash
         run: |
-          report=$(find ./test-results -name coverage.cobertura.xml | head -1)
-          if [ -z "$report" ]; then
+          if ! compgen -G "./test-results/*.cobertura.xml" > /dev/null; then
             echo "::error::No coverage report was produced."
             exit 1
           fi
-          python3 - "$report" <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import sys, xml.etree.ElementTree as ET
-          root = ET.parse(sys.argv[1]).getroot()
+          python3 - './test-results/*.cobertura.xml' <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, sys, xml.etree.ElementTree as ET
+          # Counted rather than averaged. Each report carries its own rates, and a mean of rates
+          # weights a package with four lines the same as one with four hundred. A line covered by
+          # one suite is covered, so the reports are unioned per line rather than summed.
+          packages = {}
+          for report in sorted(glob.glob(sys.argv[1])):
+              for package in ET.parse(report).getroot().iter("package"):
+                  seen = packages.setdefault(package.get("name"), {})
+                  for cls in package.iter("class"):
+                      for line in cls.iter("line"):
+                          key = (cls.get("filename"), line.get("number"))
+                          seen[key] = seen.get(key, False) or line.get("hits") != "0"
+          # Lines only. These reports carry branch coverage as a rate per package and per class and
+          # nothing per line, and a rate cannot be unioned: two suites each covering a different side
+          # of one condition would be reported as whichever rate was higher rather than as the
+          # condition being covered. A number that cannot be combined correctly across modules is
+          # worse than a column that is not there, so the limit is named instead — see
+          # docs/testing-strategy.md.
+          def rate(lines):
+              return "%.1f%%" % (100.0 * sum(1 for hit in lines.values() if hit) / len(lines)) if lines else "n/a"
           print("## Coverage\n")
-          print("| Scope | Lines | Branches |")
-          print("| --- | --- | --- |")
-          print("| Total | %.1f%% | %.1f%% |" % (
-              float(root.get("line-rate")) * 100, float(root.get("branch-rate")) * 100))
-          for pkg in root.iter("package"):
-              print("| %s | %.1f%% | %.1f%% |" % (
-                  pkg.get("name"), float(pkg.get("line-rate")) * 100, float(pkg.get("branch-rate")) * 100))
+          print("| Scope | Lines |")
+          print("| --- | --- |")
+          everything = {key: hit for lines in packages.values() for key, hit in lines.items()}
+          print("| Total | %s |" % rate(everything))
+          for name, lines in sorted(packages.items()):
+              print("| %s | %s |" % (name, rate(lines)))
           PY
 
       # Synthesis packages the publish output rather than building it, so this step is not optional:
@@ -214,5 +263,5 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage
-          path: test-results/**/coverage.cobertura.xml
+          path: test-results/*.cobertura.xml
           if-no-files-found: error

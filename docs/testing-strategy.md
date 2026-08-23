@@ -106,8 +106,13 @@ of them.
 
 ### Coverage reporting
 
-The pull-request gate collects line and branch coverage on every run and publishes the Cobertura
-report as an artifact. No threshold is enforced. A number picked before the pipeline exists would
+The pull-request gate collects coverage on every run and publishes the Cobertura reports as an
+artifact. It summarises line coverage rather than branch coverage, and that is a limit of the reports
+rather than a preference: the Testing Platform's collector writes one report per test module, each
+carrying branch coverage as a rate per package and nothing per line. Rates cannot be unioned — two
+suites covering opposite sides of one condition would be reported as whichever rate was higher — so
+the summary counts lines, which can be, and the artifact carries the rest for anyone who wants it.
+No threshold is enforced. A number picked before the pipeline exists would
 either sit below what the suite already reaches, proving nothing, or block work unrelated to the code
 that moved it. Publishing the figure on every pull request is what lets a threshold be chosen from
 evidence, and every case above is now covered, so the evidence exists and the number can be picked
@@ -166,6 +171,13 @@ red. A token that exists but is rejected still fails the container loudly: the c
 one was supplied, not whether it works, because a wrong token is a mistake and an absent one is a
 machine that has not been configured.
 
+**A token the runner cannot see is the same as no token.** The variable is read from the process
+environment of whatever starts the tests, and a shell export does not reach an IDE that was started
+from the desktop. Rider or Visual Studio on Windows reads the Windows user variables while a WSL
+shell reads its own profile, so one working tree can skip those tests in one and fail them in the
+other, which reads as a flaky suite rather than as two environments. The README carries the commands
+and where to set it.
+
 The workflow declines them a second way, and the two are not redundant. GitHub does not expose
 repository secrets to a pull request from a fork, so an outside contributor's run has no token
 however the repository is configured. Those tests carry a second `Category` trait,
@@ -193,6 +205,15 @@ the container's output, and fails naming the two variables above with the last f
 stream. Testcontainers already reports the exit-55 case with its output attached; what it cannot
 report is the container that starts, stays up, and never answers healthy, where the wait is called
 off at its ceiling and the reason stays in a log that nothing reads before the container is reaped.
+
+**The reason it prints is what separates the two failures.** Both end at exit code 55, with the same
+eight tests red and the same fixture in every stack trace, so the container's own output is the only
+thing that tells them apart. A token that is expired, revoked or mangled is reported as credentials
+that are invalid, and the fix is a fresh one. A token that never reached the licensing server is
+reported as a server that could not be contacted, and the fix is `LOCALSTACK_CA_BUNDLE` rather than
+another token. Mangled covers more than it sounds. A trailing newline or a pair of quotes carried in
+from a shell profile leaves the variable set and the fixture's presence check satisfied, and is
+rejected by activation exactly as a revoked token is.
 
 `SSL_NO_VERIFY=1` is LocalStack's own escape hatch and is deliberately set nowhere in this
 repository. A committed flag that disables certificate verification is worse than a test that says

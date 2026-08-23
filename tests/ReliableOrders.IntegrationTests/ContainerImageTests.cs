@@ -80,18 +80,30 @@ public sealed class ContainerImageTests
     /// The workflow can exclude the tests that need a token, using the trait they carry.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The fallback path exists for pull requests from forks, which GitHub gives no access to
     /// repository secrets. A filter written against a trait name that no longer matches selects
     /// nothing and the step passes, reporting a green run over tests that were never executed — so
     /// the two are held together here rather than discovered in a fork's pull request.
+    /// </para>
+    /// <para>
+    /// It is the exclusion that is asserted rather than the inclusion, because the inclusion failing
+    /// to match is loud: the platform reports zero tests and fails the run. An exclusion that matches
+    /// nothing removes nothing, and the tests it was meant to exclude then fail on the container they
+    /// have no token for.
+    /// </para>
     /// </remarks>
     [Fact]
     public void The_integration_workflow_filters_on_the_trait_the_tests_carry()
     {
         var workflow = ReadRepositoryFile(Path.Combine(".github", "workflows", "integration.yml"));
 
+        // The whole flag, not the trait name alone. Under the Testing Platform the exclusion is
+        // `--filter-not-trait "Category=X"` where it used to be a `Category!=X` clause, and the trait
+        // name on its own would also match the inclusion flag beside it — which is the one case this
+        // has to tell apart.
         Assert.Contains(
-            $"Category!={TestCategory.RequiresLocalStackToken}",
+            $"--filter-not-trait \"{TestCategory.Name}={TestCategory.RequiresLocalStackToken}\"",
             workflow,
             StringComparison.Ordinal);
     }

@@ -5,10 +5,10 @@ namespace ReliableOrders.IntegrationTests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The gate runs <c>--filter "Category!=Integration"</c>, so a test carrying this trait is skipped
-/// there and runs in the integration workflow instead. The filter is expressed as an exclusion rather
-/// than an inclusion on purpose: a new test project that nobody remembers to wire up still runs in the
-/// gate, which is the safe direction to be wrong in.
+/// The gate runs <c>--filter-not-trait "Category=Integration"</c>, so a test carrying this trait is
+/// left out there and runs in the integration workflow instead. The filter is expressed as an
+/// exclusion rather than an inclusion on purpose: a new test project that nobody remembers to wire up
+/// still runs in the gate, which is the safe direction to be wrong in.
 /// </para>
 /// <para>
 /// These tests are separated because they pull a 758 MB image and start a container, which is minutes
@@ -19,7 +19,7 @@ namespace ReliableOrders.IntegrationTests;
 internal static class TestCategory
 {
     /// <summary>
-    /// The trait name. <c>Category</c> is what <c>dotnet test --filter</c> matches on.
+    /// The trait name, which is the left half of every <c>--filter-trait</c> pair.
     /// </summary>
     internal const string Name = "Category";
 
@@ -34,9 +34,10 @@ internal static class TestCategory
     /// <remarks>
     /// <para>
     /// Carried as a second <c>Category</c> value alongside <see cref="Integration"/>, so the
-    /// integration workflow can run everything with <c>Category=Integration</c> when a token is
-    /// available and fall back to <c>Category=Integration&amp;Category!=RequiresLocalStackToken</c>
-    /// when there is none.
+    /// integration workflow can run everything with <c>--filter-trait "Category=Integration"</c> when
+    /// a token is available and add <c>--filter-not-trait "Category=RequiresLocalStackToken"</c> when
+    /// there is none. The two combine as an AND, where the VSTest expression they replace joined the
+    /// same two conditions with <c>&amp;</c>.
     /// </para>
     /// <para>
     /// It exists because of who cannot supply one. GitHub does not expose repository secrets to a

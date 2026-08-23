@@ -102,11 +102,16 @@ jobs:
       # than one that tests less and says so.
       - name: Test
         run: |
+          # Trait filters are the platform's own now rather than VSTest's expression syntax, so the
+          # exclusion is a second flag instead of a clause. The two combine as an AND: run what
+          # carries Category=Integration, minus what also carries the token trait.
+          excluded=()
+
           if [ -z "$LOCALSTACK_AUTH_TOKEN" ]; then
             echo "::warning::LOCALSTACK_AUTH_TOKEN is not available to this run, so the SQS and batch response tests were skipped. This is expected for a pull request from a fork."
-            filter="Category=Integration&Category!=RequiresLocalStackToken"
-          else
-            filter="Category=Integration"
+            excluded=(--filter-not-trait "Category=RequiresLocalStackToken")
           fi
-          dotnet test tests/ReliableOrders.IntegrationTests/ReliableOrders.IntegrationTests.csproj \
-            -c Release --no-build --filter "$filter"
+
+          dotnet test --project tests/ReliableOrders.IntegrationTests \
+            -c Release --no-build \
+            -- --filter-trait "Category=Integration" "${excluded[@]}"
