@@ -471,8 +471,7 @@ aws-dotnet-lambda-sqs-idempotency/
 │   ├── check_doc_links_test.py        its cases, run in the gate before it is trusted
 │   ├── check-stack-outputs.py         a deployment produced every output the runbooks reach for
 │   ├── cleanup-ephemeral-stacks.sh    removes end-to-end stacks a cancelled run never destroyed
-│   ├── configure-deployment-environments.sh
-│   └── github/                        one-off backlog scripts, kept for the audit trail
+│   └── configure-deployment-environments.sh
 ├── .github/
 │   ├── ISSUE_TEMPLATE/
 │   ├── pull_request_template.md

@@ -71,17 +71,26 @@ class AnchorTests(unittest.TestCase):
 class TargetTests(unittest.TestCase):
     """Which links are seen at all. A link this misses is a link nothing checks."""
 
+    @staticmethod
+    def found(text: str) -> list[str]:
+        return [target for _, target in checker.targets(text)]
+
     def test_a_plain_link(self):
-        self.assertEqual(checker.targets("see [the model](cost-model.md#idle)"), ["cost-model.md#idle"])
+        self.assertEqual(self.found("see [the model](cost-model.md#idle)"), ["cost-model.md#idle"])
 
     def test_a_link_carrying_a_title(self):
-        self.assertEqual(checker.targets('[a](b.md "Some title")'), ["b.md"])
+        self.assertEqual(self.found('[a](b.md "Some title")'), ["b.md"])
 
     def test_a_badge_yields_the_link_and_the_image_inside_it(self):
-        self.assertEqual(checker.targets("[![build](badge.svg)](ci.md)"), ["ci.md", "badge.svg"])
+        self.assertEqual(self.found("[![build](badge.svg)](ci.md)"), ["ci.md", "badge.svg"])
 
     def test_a_bare_image(self):
-        self.assertEqual(checker.targets("![diagram](flow.png)"), ["flow.png"])
+        self.assertEqual(self.found("![diagram](flow.png)"), ["flow.png"])
+
+    def test_a_label_that_wraps_across_two_lines(self):
+        """Prose is hard-wrapped at 100 columns, so this is how a long citation is usually written."""
+        self.assertEqual(self.found("see [Cost\nModel](cost-model.md#idle) for the rest"),
+                         ["cost-model.md#idle"])
 
 
 class CheckTests(unittest.TestCase):
@@ -149,6 +158,18 @@ class CheckTests(unittest.TestCase):
         """A fenced block shows how a link is written; the file it names need not exist."""
         self.tree(a_md="# A\n\n```markdown\n[example](never-written.md)\n```\n")
         self.assertEqual(self.failures(), [])
+
+    def test_a_wrapped_link_is_checked_and_reported_on_the_line_its_target_is_on(self):
+        """Twenty-five links in this repository were written this way and none of them was checked."""
+        self.tree(a_md="# A\n\nsee [the\nmodel](gone.md) here\n")
+        failure = self.only_failure()
+        self.assertIn("a.md:4", failure)
+        self.assertIn("gone.md", failure)
+
+    def test_a_wrapped_link_to_a_renamed_heading_fails(self):
+        self.tree(a_md="# A\n\n[Two Idempotency\nScopes](b.md#two-idempotency-scopes)\n",
+                  b_md="# B\n\n## Two hashes\n")
+        self.assertIn("no such heading", self.only_failure())
 
     def test_an_anchor_on_a_directory_is_refused(self):
         self.tree(a_md="# A\n\n[x](sub/#heading)\n", sub__c_md="# C\n")

@@ -67,32 +67,49 @@ def anchors(path: Path) -> set[str]:
     return {name if index == 0 else f"{name}-{index}" for name, count in found.items() for index in range(count)}
 
 
-def targets(text: str) -> list[str]:
-    """Every link target in a fragment, including the ones inside another link's label."""
+def without_fences(text: str) -> str:
+    """The document with its fenced blocks blanked out, every other character left where it was.
+
+    Blanked rather than removed because the offsets that survive are what a failure is reported by.
+    A sample inside a fence shows how a link is written, and the file it names need not exist.
+    """
+    kept = []
+    fenced = False
+
+    for line in text.splitlines():
+        if FENCE.match(line):
+            fenced = not fenced
+            kept.append("")
+            continue
+
+        kept.append("" if fenced else line)
+
+    return "\n".join(kept)
+
+
+def targets(text: str, offset: int = 0) -> list[tuple[int, str]]:
+    """Every link target in a fragment, with where it starts, including those inside a label."""
     found = []
 
     for match in LINK.finditer(text):
-        found.append(match.group(2))
-        found.extend(targets(match.group(1)))
+        found.append((offset + match.start(2), match.group(2)))
+        found.extend(targets(match.group(1), offset + match.start(1)))
 
     return found
 
 
 def links(path: Path) -> list[tuple[int, str]]:
-    """Every inline link in a document, with the line it is written on, fenced samples excluded."""
-    found = []
-    fenced = False
+    """Every inline link in a document, with the line its target is written on.
 
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if FENCE.match(line):
-            fenced = not fenced
-            continue
-        if fenced:
-            continue
+    Matched against the whole document rather than line by line. Prose here is hard-wrapped at 100
+    columns, so a citation's label routinely breaks across two lines — `[Cost\nModel](cost-model.md)`
+    — which is one link on the page and two fragments to a line scan. Twenty-five links in this
+    repository were written that way when this was fixed, and every one of them was a cross-document
+    heading citation: precisely what the checker exists to protect, passing silently.
+    """
+    text = without_fences(path.read_text(encoding="utf-8"))
 
-        found.extend((number, target) for target in targets(line))
-
-    return found
+    return [(text.count("\n", 0, position) + 1, target) for position, target in targets(text)]
 
 
 def documents(root: Path) -> list[Path]:
