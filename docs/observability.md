@@ -93,11 +93,14 @@ Emit custom metrics asynchronously through CloudWatch Embedded Metric Format.
 - `Environment`
 
 Metrics are aggregated per invocation and published as one EMF record when the invocation ends, with
-each record's latencies carried as an array of values rather than one record per message. Per-record
-EMF is what makes Logs ingestion the dominant cost noted below, and CloudWatch derives the same
-statistics either way. Publishing happens on disposal so an invocation that throws still reports what
-it managed. A batch large enough to exceed EMF's limit of 100 values against one metric publishes the
-remaining samples in further records carrying no counters.
+each record's latencies carried as an array of values rather than one record per message. CloudWatch
+derives the same statistics either way, and one record an invocation is the more legible shape —
+which is the whole of the argument. Specifications v1 to v3 also claimed per-record EMF was what
+made Logs ingestion this project's dominant cost; measured, it is 457 bytes a record, and [Cost
+Model](cost-model.md#the-dominant-line-item) is where that claim comes apart. Publishing happens on
+disposal so an invocation that throws still reports what it managed. A batch large enough to exceed
+EMF's limit of 100 values against one metric publishes the remaining samples in further records
+carrying no counters.
 
 A counter that stayed at zero is omitted rather than published as a zero, so that one poison message
 produces exactly one data point rather than five, one of which is non-zero. Four metrics are exempt
@@ -123,10 +126,13 @@ Never use `OrderId`, `EventId`, `CustomerId`, or `SqsMessageId` as metric dimens
 Permanent-failure metrics are gated on `ApproximateReceiveCount == 1` per the Retry Amplification
 of Permanent Failures section.
 
-**Cost note.** Per-record EMF to stdout makes CloudWatch Logs ingestion the dominant cost of this
-project at any meaningful volume. Record this in `docs/cost-model.md` alongside the fact that
-DynamoDB transactional writes consume twice the write capacity of an equivalent unconditional
-`PutItem`.
+**Cost note.** What this telemetry costs is in [Cost Model](cost-model.md), and three of its figures
+belong here. Aggregating an invocation's metrics into one record takes 457 bytes per record out of
+the log stream, worth $0.23 a million events — which leaves CloudWatch Logs ingestion the fourth
+line item rather than the first it was long assumed to be. A DynamoDB transactional write consumes
+twice the capacity of an unconditional `PutItem`, over two items, so an order costs four write units
+and that is the largest line this design cannot reduce. The largest line it can reduce is X-Ray, at
+58% of the total, for the reason the tracing section now states.
 
 ## Tracing Specification
 
@@ -160,6 +166,10 @@ spans.
 - Export to AWS X-Ray through the collector. The execution role therefore holds the two X-Ray write
   actions, which are the only unscoped permissions in the stack; see [Security
   Requirements](security.md).
+- No sampler is configured, so the OpenTelemetry default records every trace. That is the right
+  default for a service processing a demonstration's traffic and the largest single line item at
+  volume — see [The dominant line item](cost-model.md#the-dominant-line-item) before deciding it is
+  still right.
 - Keep trace attributes free of sensitive data — no raw bodies, no customer identifiers.
 
 Treat tracing as diagnostic telemetry, not as a source of business correctness.

@@ -126,6 +126,34 @@ pull request that introduced them. It keeps a read-only token: commenting would 
 CodeQL runs from GitHub's default setup rather than a workflow in this repository, over `actions` and
 `csharp`, and reports as `Analyze (actions)` and `Analyze (csharp)`.
 
+## Documentation Checks
+
+The workflow file is `.github/workflows/markdownlint.yml`, and its job is the required `lint` check
+above. It runs two things.
+
+markdownlint enforces how a document is written — the 100-column wrap, fenced code blocks, one
+emphasis style — from `.markdownlint-cli2.jsonc`, so a local `npx markdownlint-cli2` run and CI
+cannot disagree about the rules.
+
+`scripts/check-doc-links.py` enforces where its links go. The two are not the same check: markdownlint
+is satisfied by a link that is well-formed and points at nothing. Fourteen documents, six decision
+records and three runbooks cite each other by heading, so a heading reworded in one of them breaks
+every citation of it elsewhere — and the broken citation lands at the top of the right document,
+which is what makes it survive review. The script resolves every relative link and every anchor
+against the slugs GitHub derives from the headings themselves, and fails naming the file, the line
+and the target.
+
+External links are deliberately not resolved. That needs the network, and a required check that
+fails because somebody else's site is down is a check people learn to re-run rather than read. It
+needs no node and no restore either, so it runs ahead of the linter.
+
+`scripts/check_doc_links_test.py` runs first, and is the only script in this repository with tests of
+its own. What earns them is the position: a checker inside a required gate is trusted by every merge,
+so a false positive does not report a broken document — it blocks work until somebody deletes a
+heading that was correct. The first draft had two of them, and both are cases now. The suite is
+standard-library `unittest`, needs no package installed, and runs in about ten milliseconds:
+`python3 scripts/check_doc_links_test.py`.
+
 ## Emulator Digests
 
 The workflow file is `.github/workflows/image-digests.yml`. It runs weekly and on demand, resolves

@@ -1,7 +1,8 @@
 # Security Requirements
 
-Design-time controls the implementation must satisfy. Threats, attacker
-profiles and mitigations belong in `docs/threat-model.md`, which is not written yet.
+Design-time controls the implementation must satisfy. Which threat each one answers, and what is
+left over after it, is in [Threat Model](threat-model.md) — a document of its own, because a control
+changes when the stack does and a threat changes when the system's boundaries do.
 
 - Use GitHub OIDC; do not store long-lived AWS access keys in GitHub.
 - Restrict the OIDC role trust policy to the repository, branch or tag, and GitHub environment.
@@ -47,5 +48,3 @@ profiles and mitigations belong in `docs/threat-model.md`, which is not written 
 - Do not expose the queue publicly.
 - Use encryption at rest for queues, tables, and logs where appropriate.
 - Keep production data when a stack is deleted; only ephemeral stacks may destroy data.
-- Add a threat model covering malformed events, replay, key reuse, resource exhaustion, logging
-  leakage, and compromised CI.

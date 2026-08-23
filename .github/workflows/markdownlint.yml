@@ -30,6 +30,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The checker below is inside a required gate, so every merge trusts it and a false positive
+      # blocks one. Its own cases run first, and take milliseconds, so a checker that has broken
+      # fails as itself rather than as a document nobody has changed.
+      - name: Test the documentation link checker
+        run: python3 scripts/check_doc_links_test.py
+
+      # markdownlint checks how a link is written, never where it goes. A heading renamed in one
+      # document silently breaks every citation of it in the other thirteen, and a link that lands
+      # at the top of the right document looks like a link that works. The script resolves every
+      # relative link and anchor in the repository and needs neither the network nor node, so it
+      # runs before the linter that takes longer to start than it does to finish.
+      - name: Check documentation links
+        run: python3 scripts/check-doc-links.py
+
       - name: Run markdownlint
         uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
         with:

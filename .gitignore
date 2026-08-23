@@ -62,3 +62,9 @@ Thumbs.db
 
 ## Node, used only by the markdownlint workflow
 node_modules/
+
+## Python
+# The scripts here are run rather than imported, with one exception: the link checker's suite loads
+# it by path, and CPython writes a cache for what it loads.
+__pycache__/
+*.pyc

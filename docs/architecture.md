@@ -439,20 +439,22 @@ aws-dotnet-lambda-sqs-idempotency/
 │   ├── architecture.md
 │   ├── infrastructure.md
 │   ├── observability.md
+│   ├── cost-model.md
 │   ├── security.md
+│   ├── threat-model.md
 │   ├── ci-cd.md
 │   ├── testing-strategy.md
 │   ├── engineering-standards.md
 │   ├── delivery.md
 │   ├── revision-log.md
-│   ├── threat-model.md                not yet written
-│   ├── cost-model.md                  not yet written
 │   ├── adr/
+│   │   ├── template.md
 │   │   ├── 0001-use-sqs-standard-queue.md
 │   │   ├── 0002-use-dynamodb-transactions.md
 │   │   ├── 0003-use-dotnet-10-managed-runtime.md
 │   │   ├── 0004-use-opentelemetry.md
-│   │   └── 0005-separate-envelope-and-business-hashes.md
+│   │   ├── 0005-separate-envelope-and-business-hashes.md
+│   │   └── 0006-set-invariant-globalization.md
 │   └── runbooks/
 │       ├── dlq-investigation-and-redrive.md
 │       ├── idempotency-conflict.md
@@ -465,23 +467,24 @@ aws-dotnet-lambda-sqs-idempotency/
 │   ├── conflicting-order-created-v1.json
 │   └── invalid-order-created-v1.json
 ├── scripts/
-│   ├── check-stack-outputs.py
-│   ├── cleanup-ephemeral-stacks.sh
+│   ├── check-doc-links.py             resolves every relative link and anchor in the documentation
+│   ├── check_doc_links_test.py        its cases, run in the gate before it is trusted
+│   ├── check-stack-outputs.py         a deployment produced every output the runbooks reach for
+│   ├── cleanup-ephemeral-stacks.sh    removes end-to-end stacks a cancelled run never destroyed
 │   ├── configure-deployment-environments.sh
-│   ├── deploy-local.sh
-│   ├── send-sample-events.sh
-│   ├── run-e2e.sh
-│   └── cleanup-ephemeral-stacks.sh
+│   └── github/                        one-off backlog scripts, kept for the audit trail
 ├── .github/
 │   ├── ISSUE_TEMPLATE/
-│   ├── PULL_REQUEST_TEMPLATE.md
+│   ├── pull_request_template.md
 │   ├── dependabot.yml
 │   └── workflows/
-│       ├── ci.yml
+│       ├── ci.yml                     the required `Build and test` gate
+│       ├── dependency-review.yml
 │       ├── deploy-dev.yml
 │       ├── e2e.yml
-│       ├── codeql.yml
-│       ├── markdownlint.yml
+│       ├── image-digests.yml
+│       ├── integration.yml
+│       ├── markdownlint.yml           the required `lint` gate: markdownlint and the link check
 │       └── release.yml
 ├── .editorconfig
 ├── .gitattributes
@@ -497,7 +500,6 @@ aws-dotnet-lambda-sqs-idempotency/
 ├── SECURITY.md
 ├── SUPPORT.md
 ├── CODE_OF_CONDUCT.md
-├── CHANGELOG.md
 ├── LICENSE
 └── README.md
 ```

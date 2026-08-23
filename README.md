@@ -42,6 +42,8 @@ Start with the [documentation index](docs/README.md). The load-bearing documents
 | [Event Contract](docs/event-contract.md) | The versioned envelope, validation rules, canonical hashing |
 | [Architecture](docs/architecture.md) | C4 context and container diagrams, components, repository layout |
 | [Testing Strategy](docs/testing-strategy.md) | Five test levels, and which emulator is trustworthy for what |
+| [Threat Model](docs/threat-model.md) | Trust boundaries, the six threats, and what each mitigation leaves behind |
+| [Cost Model](docs/cost-model.md) | What a million events consume, which line item dominates, and what an idle stack costs |
 
 ### Architecture decisions
 
