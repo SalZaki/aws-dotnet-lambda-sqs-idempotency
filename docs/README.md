@@ -16,7 +16,9 @@ history is in the [Revision Log](revision-log.md).
 | [Architecture](architecture.md) | Component diagram, application components and their contracts, and the repository layout. |
 | [Infrastructure](infrastructure.md) | Runtime and technology decisions, every AWS resource, and the CDK design that creates them. |
 | [Observability](observability.md) | Structured logging, metrics, tracing, dashboard and alarms. |
+| [Cost Model](cost-model.md) | What a million events consume, what that costs, which line item dominates, and what an idle stack still bills for. |
 | [Security Requirements](security.md) | OIDC, least-privilege IAM, supply-chain controls and data-handling rules. |
+| [Threat Model](threat-model.md) | Trust boundaries, attacker profiles, the six threats, and the risk each mitigation leaves behind. |
 | [CI/CD Design](ci-cd.md) | Pull-request CI, development and release deployment, and the ephemeral end-to-end workflow. |
 | [Testing Strategy](testing-strategy.md) | Unit, concurrency, integration, CDK and real-AWS tests, and which emulator is trustworthy for what. |
 | [.NET Engineering Standards](engineering-standards.md) | Repository-wide build settings and the coding rules that protect the correctness model. |
@@ -29,6 +31,13 @@ history is in the [Revision Log](revision-log.md).
 
 Read [Overview](overview.md) first, then [Correctness Model](correctness-model.md). Those two
 carry the reasoning every other document depends on. The rest can be read in any order.
+
+Two pairs are written to be read together. [Security Requirements](security.md) lists the controls
+the implementation must satisfy and [Threat Model](threat-model.md) says which threat each one
+answers — separate documents, because a control changes when the stack does and a threat changes
+when the system's boundaries do. [Observability](observability.md) decides what this service emits
+and [Cost Model](cost-model.md) prices it, which is where the telemetry decisions are argued in
+money rather than in signal.
 
 The backlog is not in these documents. It is maintained as GitHub issues, for the reasons given
 in [Delivery](delivery.md#backlog).

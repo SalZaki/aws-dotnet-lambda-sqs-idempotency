@@ -34,7 +34,10 @@ Emulation](docs/testing-strategy.md#sqs-emulation) covers reading a failure.
 
 Formatting is part of the build, not a separate step, so a layout violation is a build error. Fix
 one with `dotnet format ReliableOrders.slnx`. Markdown is linted too, at 100 columns:
-`npx markdownlint-cli2`.
+`npx markdownlint-cli2`. Its links are checked separately, because a link that points at nothing is
+written correctly: `python3 scripts/check-doc-links.py` resolves every relative link and anchor in
+the repository, and `python3 scripts/check_doc_links_test.py` is that script's own suite. Both need
+only python.
 
 Nothing in the suite reads `compose.yaml`. It is the [local development
 stack](README.md#running-it-locally), for watching the flows by hand, and a change to the emulator
@@ -49,7 +52,7 @@ Three checks must pass before a pull request can merge, and the branch must be u
 | Check | What it runs |
 | --- | --- |
 | `Build and test` | Format, build, every test that needs no container, and a `cdk synth` of the CDK app |
-| `lint` | markdownlint over every markdown file |
+| `lint` | markdownlint over every markdown file, and every relative link and anchor resolved |
 | `Dependency review` | The dependency diff, failing at high severity or above |
 
 Commits must be signed. The container-backed `Integration tests` workflow is deliberately advisory:
