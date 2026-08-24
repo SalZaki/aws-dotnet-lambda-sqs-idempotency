@@ -5,15 +5,20 @@ function with batches of order events. The worker validates each event, prevents
 effects, stores the order atomically in DynamoDB, reports per-record failures, and lets repeatedly
 failing messages move to a dead-letter queue.
 
+[![ci](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/actions/workflows/ci.yml/badge.svg)](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/actions/workflows/ci.yml)
+[![integration](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/actions/workflows/integration.yml/badge.svg)](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/actions/workflows/integration.yml)
 [![markdownlint](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/actions/workflows/markdownlint.yml/badge.svg)](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/actions/workflows/markdownlint.yml)
+[![licence](https://img.shields.io/github/license/SalZaki/aws-dotnet-lambda-sqs-idempotency)](LICENSE)
 
 ## Status
 
 **Deployable, and not yet released.** The worker, the infrastructure that runs it and the pipeline
 that deploys it are all in place: the processing path is implemented and tested at five levels, the
-CDK application deploys the whole stack, and a push to `main` deploys it through OpenID Connect with
-no AWS credential stored anywhere. What is left before the first tagged release is the
-demonstration assets — recordings of the flows this file describes in words.
+CDK application deploys the whole stack, and a push to `main` deploys it through OpenID Connect,
+with no AWS credential stored anywhere, as soon as an account is configured for it. None is
+configured here, so nothing has been deployed from this repository yet — [Setting up an
+account](#setting-up-an-account) is what changes that. What is left before the first tagged release
+is the demonstration assets: recordings of the flows this file describes in words.
 
 Progress is tracked through the
 [milestones](https://github.com/SalZaki/aws-dotnet-lambda-sqs-idempotency/milestones), which run
@@ -86,8 +91,9 @@ GitHub-to-AWS deployment with OpenID Connect.
 
 **.NET.** .NET 10 and modern C#. Dependency injection and composition roots. `System.Text.Json`
 source generation. Immutable message contracts. Validation and explicit error classification.
-Cancellation and timeout handling. AWS SDK for .NET v4. Unit, integration, architecture and
-end-to-end testing. Central package management and reproducible builds.
+Cancellation and timeout handling. AWS SDK for .NET v4. Unit, concurrency, integration, CDK and
+end-to-end testing, with layering enforced as an architecture test and the whole suite on
+Microsoft.Testing.Platform. Central package management and reproducible builds.
 
 **Distributed systems.** At-least-once delivery. Idempotency and duplicate detection. Atomicity and
 failure windows. Poison-message handling. Partial batch responses. Backpressure and concurrency
