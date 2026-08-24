@@ -41,6 +41,9 @@ packages/
 # stops being reproducible, which is the opposite of what the pinned SDK and lock files are for.
 cdk.out/
 .cdk.staging/
+# The outputs file a deployment writes, which the README tells a reader to keep beside cdk.json. It
+# names queue URLs and roles, and both carry the account ID this repository's workflows mask.
+outputs.json
 
 ## AWS Lambda tooling
 *.zip
