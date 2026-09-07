@@ -4,9 +4,9 @@
     "net10.0": {
       "Amazon.CDK.Lib": {
         "type": "Direct",
-        "requested": "[2.266.0, )",
-        "resolved": "2.266.0",
-        "contentHash": "4nuf/ehTrPfbPWOWRFkipx+YJ52Uwn6y7UbaWBnwfv0CBkTQ4SjGs32MwPI53yRtMJfRSozJQTU9wE5b8AeoFg==",
+        "requested": "[2.268.0, )",
+        "resolved": "2.268.0",
+        "contentHash": "SVp2I7+k8CYHKn/Z9FK/XOsTd06HP3RMQTr2v/s8JQ3Z6RHKIImlV0aWV7cfUEX5J+3NYTO1vQo4x36XZEMHtg==",
         "dependencies": {
           "Amazon.CDK.Asset.AwsCliV1": "[2.2.292]",
           "Amazon.CDK.Asset.NodeProxyAgentV6": "[2.1.2, 3.0.0)",
@@ -366,7 +366,7 @@
       "reliableorders.cdk": {
         "type": "Project",
         "dependencies": {
-          "Amazon.CDK.Lib": "[2.266.0, )",
+          "Amazon.CDK.Lib": "[2.268.0, )",
           "Cdklabs.CdkNag": "[3.0.2, )",
           "Constructs": "[10.8.1, )"
         }
