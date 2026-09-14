@@ -4,39 +4,39 @@
     "net10.0": {
       "AWSSDK.CloudWatch": {
         "type": "Direct",
-        "requested": "[4.0.104, )",
-        "resolved": "4.0.104",
-        "contentHash": "TAVKoXWOw4B349IGw9nnQOqKlRNGjfNIkEeCV4wNjqlqDv9tNcxilPfjBGIHhE2J7Wo1RUGR3gxUlSIZpZq6mg==",
+        "requested": "[4.0.104.3, )",
+        "resolved": "4.0.104.3",
+        "contentHash": "0I8KMikwRULqLiOjNSa1Ml+bf4ed4+y2e/UkHS7FNadm8xPGUCPbfJ/U1xso4E6OLCwlyVGnDZFN6bdWY3pkdw==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102, 5.0.0)",
-          "AWSSDK.Extensions.CborProtocol": "[4.0.100.10, 5.0.0)"
+          "AWSSDK.Core": "[4.0.102.4, 5.0.0)",
+          "AWSSDK.Extensions.CborProtocol": "[4.0.100.13, 5.0.0)"
         }
       },
       "AWSSDK.CloudWatchLogs": {
         "type": "Direct",
-        "requested": "[4.0.103.3, )",
-        "resolved": "4.0.103.3",
-        "contentHash": "evmJP+jf5xR8DqsqHgIu85nRGONUcXchKXcktaMrpfQ8xF4t4WfZixVfqZkV4sT0wl5R05vRit5fV1o6lj/F7A==",
+        "requested": "[4.0.104.2, )",
+        "resolved": "4.0.104.2",
+        "contentHash": "hMPgHHL6qtprav1liHYkligb9pbVdLh0pi49/JTm/wpzUzo/vN5tBvq9LUe/WOZ9EiCOY7L1z82ShCAe5/5UxA==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102, 5.0.0)"
+          "AWSSDK.Core": "[4.0.102.4, 5.0.0)"
         }
       },
       "AWSSDK.DynamoDBv2": {
         "type": "Direct",
-        "requested": "[4.0.103.4, )",
-        "resolved": "4.0.103.4",
-        "contentHash": "uXH67JhaTnD64vnX6DfNsRk/KSCdw9npdhsreWi33MZE0pdzr6KDj5m6iWsd+PDkI1tAjB7ht2S20rwdwhuppA==",
+        "requested": "[4.0.103.7, )",
+        "resolved": "4.0.103.7",
+        "contentHash": "0zGKYOL0OwgXkYU4fKd8T6cwd1QYYTuRDU9xNldR7v+Y9H14PMzbCae01LF29Ti0U0eQV2E1GKS77pmSChfS+Q==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102, 5.0.0)"
+          "AWSSDK.Core": "[4.0.102.4, 5.0.0)"
         }
       },
       "AWSSDK.SQS": {
         "type": "Direct",
-        "requested": "[4.0.100.10, )",
-        "resolved": "4.0.100.10",
-        "contentHash": "u2IjUITEZgsz2zoBL4MSgsy3TrUuvmLxiQOp0uBzqYckyMcth8XB7Td4lFVY8Be8rwygsl671Jta1GyRLE098w==",
+        "requested": "[4.0.100.13, )",
+        "resolved": "4.0.100.13",
+        "contentHash": "Ts2Ee5cZ7X1VwefwVNrLvoi+QC8HidMbimmZiY+wn0gddX1qau4y5PMyN/0R25JrTICEUn2Ik7WKB/xQhkseTQ==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102, 5.0.0)"
+          "AWSSDK.Core": "[4.0.102.4, 5.0.0)"
         }
       },
       "Microsoft.Testing.Extensions.CodeCoverage": {
@@ -61,15 +61,15 @@
       },
       "AWSSDK.Core": {
         "type": "Transitive",
-        "resolved": "4.0.102",
-        "contentHash": "sjkYreyNPlYTnAxdnqd3MBoeTNZHXOzV9lKULS5VAn+6MJIqu87aZLlm56KhDANOBXRxwDJIW668ZlsFhaB6Zw=="
+        "resolved": "4.0.102.4",
+        "contentHash": "cFMZnb05RV290HDdybtgR5b/ypkLekeaoHde4tiQHLmgegGLMmcEKsvThnLm1PJOeWSNFcBxzC5fomOvWiW24A=="
       },
       "AWSSDK.Extensions.CborProtocol": {
         "type": "Transitive",
-        "resolved": "4.0.100.10",
-        "contentHash": "iEoooVzAYx6MFmP4Nuxmty8HGWwmURuq5V2uRBiaGQrG2XV5S62Fpw7LrhaAUMj5IE46UpFUGBGTA+YHTjz6ng==",
+        "resolved": "4.0.100.13",
+        "contentHash": "9QavhLjNdnuFYfFBKDHxVtMTUk7BJ+H47XpcPN7B7OaOaOiN6PvrtUoVe094FiDy9iHgXU90ZiCsAdo+FBFiWA==",
         "dependencies": {
-          "AWSSDK.Core": "4.0.102",
+          "AWSSDK.Core": "4.0.102.4",
           "System.Formats.Cbor": "9.0.5"
         }
       },
