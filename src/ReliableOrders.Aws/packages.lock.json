@@ -10,17 +10,17 @@
       },
       "AWSSDK.DynamoDBv2": {
         "type": "Direct",
-        "requested": "[4.0.103.4, )",
-        "resolved": "4.0.103.4",
-        "contentHash": "uXH67JhaTnD64vnX6DfNsRk/KSCdw9npdhsreWi33MZE0pdzr6KDj5m6iWsd+PDkI1tAjB7ht2S20rwdwhuppA==",
+        "requested": "[4.0.107, )",
+        "resolved": "4.0.107",
+        "contentHash": "v03bIsEvQ4onYDKjeI7krAk9wmNC4FS2NkoeRRg4KeXOBwurg8NY7MgSCOTy3KDNmEkgmOnggwn4Dhh23xrtYw==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102, 5.0.0)"
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
         }
       },
       "AWSSDK.Core": {
         "type": "Transitive",
-        "resolved": "4.0.102",
-        "contentHash": "sjkYreyNPlYTnAxdnqd3MBoeTNZHXOzV9lKULS5VAn+6MJIqu87aZLlm56KhDANOBXRxwDJIW668ZlsFhaB6Zw=="
+        "resolved": "4.0.102.8",
+        "contentHash": "90B9Skhl+ORbtWNXrrmGdGhGvAfZiPmZafRYrB/xHelZjePIwPvXioqz9UiiF1vo21eDLzTnXh5EC4RjbNWsFQ=="
       },
       "Microsoft.Extensions.DependencyInjection.Abstractions": {
         "type": "Transitive",
