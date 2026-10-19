@@ -4,14 +4,14 @@
     "net10.0": {
       "Amazon.CDK.Lib": {
         "type": "Direct",
-        "requested": "[2.266.0, )",
-        "resolved": "2.266.0",
-        "contentHash": "4nuf/ehTrPfbPWOWRFkipx+YJ52Uwn6y7UbaWBnwfv0CBkTQ4SjGs32MwPI53yRtMJfRSozJQTU9wE5b8AeoFg==",
+        "requested": "[2.273.0, )",
+        "resolved": "2.273.0",
+        "contentHash": "XzWgvlM6SoVg8J0C5pcG8BvOMbpzXOt3DPx5N7eHhZ+e/8zGQvd//78TNh03gUVG+emngF/yWiDiqRSsLMW91g==",
         "dependencies": {
           "Amazon.CDK.Asset.AwsCliV1": "[2.2.292]",
           "Amazon.CDK.Asset.NodeProxyAgentV6": "[2.1.2, 3.0.0)",
-          "Amazon.CDK.CloudAssembly.Schema": "[54.11.0, 55.0.0)",
-          "Amazon.JSII.Runtime": "[1.139.0, 2.0.0)",
+          "Amazon.CDK.CloudAssembly.Schema": "[54.24.0, 55.0.0)",
+          "Amazon.JSII.Runtime": "[1.140.0, 2.0.0)",
           "Constructs": "[10.5.0, 11.0.0)"
         }
       },
@@ -64,16 +64,16 @@
       },
       "Amazon.CDK.CloudAssembly.Schema": {
         "type": "Transitive",
-        "resolved": "54.11.0",
-        "contentHash": "3d4A+z8lfGKSjTWoahVThPnFmMkl7F9smNttKV08vWHWq/JnWOIKbbIQuU5Vo+Tzjty00AST3aT1+a+upg02cg==",
+        "resolved": "54.24.0",
+        "contentHash": "G26AJxMMA4fgbrK/pYoXMdXsvJr+Fxl2YGhb9qmowSELzGelwoMVZWZbiy8kp2ojDqP6Fcue4COohPpNWm9OlQ==",
         "dependencies": {
-          "Amazon.JSII.Runtime": "[1.137.0, 2.0.0)"
+          "Amazon.JSII.Runtime": "[1.140.0, 2.0.0)"
         }
       },
       "Amazon.JSII.Runtime": {
         "type": "Transitive",
-        "resolved": "1.139.0",
-        "contentHash": "haGsBJonq+q60Z3B7tu6jw+CMW+sd0D+YyVdpVJF0rEVHOw46v6ecCudA+qCbXC9cEjjW3twuLsJ9xsQbRqfAA==",
+        "resolved": "1.140.0",
+        "contentHash": "PbcLA+I8HFuAR6fmQ2eRfKQq2tJdo/TxCcFJx/NX+T6s5xC2qEr+ffuBUTNJRcwJ5/nrcPh+PVAMlIzuhkpLWQ==",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection": "9.0.1",
           "Microsoft.Extensions.Logging": "9.0.1",
@@ -366,7 +366,7 @@
       "reliableorders.cdk": {
         "type": "Project",
         "dependencies": {
-          "Amazon.CDK.Lib": "[2.266.0, )",
+          "Amazon.CDK.Lib": "[2.273.0, )",
           "Cdklabs.CdkNag": "[3.0.2, )",
           "Constructs": "[10.8.1, )"
         }
